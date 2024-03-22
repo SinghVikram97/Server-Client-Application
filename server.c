@@ -27,7 +27,7 @@ void crequest(int count, int connfd){
         //     printf("Error on writing\n");
         // }
 
-        int i = strncmp("bye", buffer, 3); 
+        int i = strncmp("quitc", buffer, 3); 
 
         if(i==0) {
             break;
