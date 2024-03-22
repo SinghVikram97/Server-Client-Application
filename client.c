@@ -46,21 +46,21 @@ int main(int argc, char *argv[]) {
             printf("Error on writing\n");
         }
 
-        bzero(buffer, 255);
+        // bzero(buffer, 255);
 
-        n = read(sockfd, buffer, 255);
+        // n = read(sockfd, buffer, 255);
 
-        if(n<0){
-            printf("Error on reading\n");
-        }
+        // if(n<0){
+        //     printf("Error on reading\n");
+        // }
 
-        printf("Server: %s\n",buffer);
+        // printf("Server: %s\n",buffer);
 
-        int i=strncmp("bye",buffer,3);
+        // int i=strncmp("bye",buffer,3);
 
-        if(i==0) {
-            break;
-        }
+        // if(i==0) {
+        //     break;
+        // }
     }
     close(sockfd);
     return 0;

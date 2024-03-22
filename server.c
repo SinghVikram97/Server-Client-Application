@@ -30,40 +30,51 @@ int main(int argc, char *argv[]) {
    }
 
    listen(listenfd, 5);
-   clilen = sizeof(cli_addr);
-
-   connfd = accept(listenfd, (struct sockaddr *) &cli_addr, &clilen);
-
-   if(connfd<0){
-        printf("Error on accept");
-   }
-
+    int count=1;
    while(1){
-        bzero(buffer,255);
-        n = read(connfd, buffer, 255);
+      clilen = sizeof(cli_addr);
 
-        if(n<0){
-            printf("Error on reading\n");
-        }
+      connfd = accept(listenfd, (struct sockaddr *) &cli_addr, &clilen);
 
-        printf("Client: %s\n",buffer);
-        bzero(buffer,255);
+      if(connfd<0){
+        printf("Error on accept");
+      }
 
-        fgets(buffer, 255, stdin);
+      pid_t pid = fork();
+      if(pid==0){
+            int clientNo=count;
+            while(1){
+                bzero(buffer,255);
+                n = read(connfd, buffer, 255);
 
-        n = write(connfd, buffer, strlen(buffer));
+                if(n<0){
+                    printf("Error on reading\n");
+                }
 
-        if(n<0){
-            printf("Error on writing\n");
-        }
+                printf("Message from client number %d: %s\n",count,buffer);
+                bzero(buffer,255);
 
-        int i=strncmp("bye",buffer,3);
+                // fgets(buffer, 255, stdin);
 
-        if(i==0) {
-            break;
-        }
+                // n = write(connfd, buffer, strlen(buffer));
+
+                // if(n<0){
+                //     printf("Error on writing\n");
+                // }
+
+                int i=strncmp("bye",buffer,3);
+
+                if(i==0) {
+                    break;
+                }
+           }
+      }else{
+        count++;
+        close(connfd);
+      }
+      
    }
+
    close(listenfd);
-   close(connfd);
    return 0;
 }
