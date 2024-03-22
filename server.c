@@ -6,9 +6,38 @@
 #include<sys/socket.h>
 #include<netinet/in.h>
 
+void crequest(int count, int connfd){
+    char buffer[255];
+    int n;
+    while(1){
+        bzero(buffer,255);
+        n = read(connfd, buffer, 255);
+
+        if(n<0){
+            printf("Error on reading\n");
+        }
+
+        printf("Message from client number %d: %s\n",count,buffer);
+
+        // fgets(buffer, 255, stdin);
+
+        // n = write(connfd, buffer, strlen(buffer));
+
+        // if(n<0){
+        //     printf("Error on writing\n");
+        // }
+
+        int i = strncmp("bye", buffer, 3); 
+
+        if(i==0) {
+            break;
+        }
+    }
+    close(connfd);   
+}
+
 int main(int argc, char *argv[]) {
    int listenfd, connfd, portno, n;
-   char buffer[255];
 
    struct sockaddr_in serv_addr, cli_addr;
    socklen_t clilen;
@@ -42,32 +71,8 @@ int main(int argc, char *argv[]) {
 
       pid_t pid = fork();
       if(pid==0){
-            int clientNo=count;
-            while(1){
-                bzero(buffer,255);
-                n = read(connfd, buffer, 255);
-
-                if(n<0){
-                    printf("Error on reading\n");
-                }
-
-                printf("Message from client number %d: %s\n",count,buffer);
-                bzero(buffer,255);
-
-                // fgets(buffer, 255, stdin);
-
-                // n = write(connfd, buffer, strlen(buffer));
-
-                // if(n<0){
-                //     printf("Error on writing\n");
-                // }
-
-                int i=strncmp("bye",buffer,3);
-
-                if(i==0) {
-                    break;
-                }
-           }
+            crequest(count, connfd);
+            exit(0);
       }else{
         count++;
         close(connfd);
