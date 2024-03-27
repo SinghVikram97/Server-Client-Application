@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serv_addr;
     struct hostent *server;
 
-    char buffer[255];
+    char buffer[1024];
 
     portno = atoi(argv[2]);
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -36,9 +36,14 @@ int main(int argc, char *argv[]) {
     }
 
     while(1){
-        bzero(buffer, 255);
+        bzero(buffer, 1024);
 
-        fgets(buffer, 255, stdin);
+        fgets(buffer, 1024, stdin);
+
+        if(strncmp(buffer,"quitc",strlen("quitc"))==0){
+            printf("Closing connection on client side\n");
+            break;
+        }
 
         n = write(sockfd, buffer, strlen(buffer));
 
@@ -46,15 +51,15 @@ int main(int argc, char *argv[]) {
             printf("Error on writing\n");
         }
 
-        // bzero(buffer, 255);
+        bzero(buffer, 1024);
 
-        // n = read(sockfd, buffer, 255);
+        n = read(sockfd, buffer, 1024);
 
-        // if(n<0){
-        //     printf("Error on reading\n");
-        // }
+        if(n<0){
+            printf("Error on reading\n");
+        }
 
-        // printf("Server: %s\n",buffer);
+        printf("%s\n",buffer);
 
         // int i=strncmp("bye",buffer,3);
 
