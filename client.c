@@ -41,6 +41,10 @@ int main(int argc, char *argv[]) {
         fgets(buffer, 1024, stdin);
 
         if(strncmp(buffer,"quitc",strlen("quitc"))==0){
+            n = write(sockfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
             printf("Closing connection on client side\n");
             break;
         }
