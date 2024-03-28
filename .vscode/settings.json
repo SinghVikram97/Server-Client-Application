@@ -2,6 +2,8 @@
     "files.associations": {
         "netdb.h": "c",
         "types.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "dirent.h": "c",
+        "unistd.h": "c"
     }
 }

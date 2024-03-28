@@ -6,6 +6,9 @@
 #include<sys/socket.h>
 #include<netinet/in.h>
 #include <dirent.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <time.h>
 
 // Struct to hold directory name and creation time
 // Struct to hold directory information
@@ -21,12 +24,15 @@ int compareDirectories(const void *a, const void *b) {
     return strcmp(dir1->creation_time, dir2->creation_time);
 }
 
-void listSubdirectories(char *buffer) {
+// Function to list subdirectories in the order of their creation time
+void listSubdirectoriesByCreationTime(char *buffer) {
     char *path = getenv("HOME");
     DIR *dir;
     struct dirent *entry;
     size_t buffer_length = 0;
-    
+    DirectoryInfo directories[1024];
+    int num_directories = 0;
+
     // Open directory
     if ((dir = opendir(path)) != NULL) {
         // Iterate through directory entries
@@ -35,19 +41,118 @@ void listSubdirectories(char *buffer) {
                 // Skip "." and ".."
                 if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                     continue;
-                
-                // Append directory name to buffer
-                size_t entry_length = strlen(entry->d_name);
-                if (buffer_length + entry_length + 2 <= 1024) {
-                    strcat(buffer, entry->d_name);
-                    strcat(buffer, "\n");
-                    buffer_length += entry_length + 1;
-                } else {
-                    fprintf(stderr, "Buffer overflow\n");
-                    break;
+
+                // Get directory path
+                char dir_path[1024];
+                snprintf(dir_path, sizeof(dir_path), "%s/%s", path, entry->d_name);
+
+                // Get directory's status
+                struct stat file_stat;
+                if (stat(dir_path, &file_stat) == -1) {
+                    fprintf(stderr, "Error getting file status: %s\n", strerror(errno));
+                    continue;
                 }
+
+                // Convert creation time to string format
+                strftime(directories[num_directories].creation_time, sizeof(directories[num_directories].creation_time),
+                         "%Y-%m-%d %H:%M:%S", localtime(&(file_stat.st_ctime)));
+
+                // Copy directory name
+                strncpy(directories[num_directories].name, entry->d_name, sizeof(directories[num_directories].name) - 1);
+                directories[num_directories].name[sizeof(directories[num_directories].name) - 1] = '\0';
+
+                // Increment directory count
+                num_directories++;
             }
         }
+        closedir(dir);
+
+        // Sort directories based on creation time
+        qsort(directories, num_directories, sizeof(DirectoryInfo), compareDirectories);
+
+        // Copy sorted directories to buffer
+        for (int i = 0; i < num_directories; i++) {
+            // Get length of directory name
+            size_t entry_length = strlen(directories[i].name);
+
+            // Check for buffer overflow
+            if (buffer_length + entry_length + 2 <= 1024) {
+                // Append directory name to buffer
+                strcat(buffer, directories[i].name);
+                strcat(buffer, "\n");
+                buffer_length += entry_length + 1; // Add length of directory name and newline character
+            } else {
+                fprintf(stderr, "Buffer overflow\n");
+                break;
+            }
+        }
+    } else {
+        // Unable to open directory
+        perror("Error opening directory");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int compareStrings(const void *a, const void *b) {
+    const char *str1 = *(const char **)a;
+    const char *str2 = *(const char **)b;
+
+    // Check if either string starts with a dot
+    int dot1 = (str1[0] == '.');
+    int dot2 = (str2[0] == '.');
+
+    // Compare strings based on dot presence
+    if (!dot1 && !dot2) {
+        return strcasecmp(str1, str2);
+    } else if (dot1 && dot2) {
+        return strcasecmp(str1 + 1, str2 + 1); // Compare the second character
+    } else if (dot1) {
+        return strcasecmp(str1 + 1, str2); // Compare the second character of a and the first character of b
+    } else { // dot2
+        return strcasecmp(str1, str2 + 1); // Compare the first character of a and the second character of b
+    }
+}
+
+void listSubdirectories(char *buffer) {
+    char *path = getenv("HOME");
+    DIR *dir;
+    struct dirent *entry;
+    size_t buffer_length = 0;
+    char *directories[1024]; // Assuming max 1024 subdirectories
+
+    // Open directory
+    if ((dir = opendir(path)) != NULL) {
+        int num_dirs = 0;
+        
+        // Iterate through directory entries
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type == DT_DIR) {
+                // Skip "." and ".."
+                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                    continue;
+
+                // Store directory name
+                directories[num_dirs++] = strdup(entry->d_name);
+            }
+        }
+        
+        // Sort directory names
+        qsort(directories, num_dirs, sizeof(char*), compareStrings);
+
+        // Append sorted directory names to buffer
+        for (int i = 0; i < num_dirs; i++) {
+            size_t entry_length = strlen(directories[i]);
+            if (buffer_length + entry_length + 2 <= 1024) {
+                strcat(buffer, directories[i]);
+                strcat(buffer, "\n");
+                buffer_length += entry_length + 1;
+            } else {
+                fprintf(stderr, "Buffer overflow\n");
+                break;
+            }
+            free(directories[i]); // Free allocated memory for directory name
+        }
+        
         closedir(dir);
     } else {
         // Unable to open directory
@@ -141,7 +246,6 @@ void crequest(int count, int connfd){
             printf("Closing connection on server side for client %d\n",count);
             break;
         }
-
         else if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
             bzero(buffer,1024);
             listSubdirectories(buffer);
@@ -151,7 +255,7 @@ void crequest(int count, int connfd){
             }
 
         }
-       else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
+        else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
             bzero(buffer,1024);
             listSubdirectoriesByCreationTime(buffer);
             n = write(connfd, buffer, strlen(buffer));
@@ -160,7 +264,6 @@ void crequest(int count, int connfd){
             }
 
         }
-
         else{
             printf("Message from client number %d: %s\n",count,buffer);
             bzero(buffer,1024);
@@ -199,7 +302,7 @@ int main(int argc, char *argv[]) {
    }
 
    listen(listenfd, 5);
-    int count=1;
+   int count=1;
    while(1){
       clilen = sizeof(cli_addr);
 
