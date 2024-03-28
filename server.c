@@ -166,6 +166,65 @@ void listSubdirectories(char *buffer) {
     }
 }
 
+void handleRequestOnClient(int count, int connfd, char *buffer){
+    int n;
+    if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
+            bzero(buffer,1024);
+            listSubdirectories(buffer);
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
+
+    }
+    else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
+            bzero(buffer,1024);
+            listSubdirectoriesByCreationTime(buffer);
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
+
+    }else{
+            printf("Message from client number %d: %s\n",count,buffer);
+            bzero(buffer,1024);
+            strcpy(buffer, "message received on server side no handler yet\n");
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
+    }
+}
+
+void handleRequestOnMirror1(int count, int connfd, int sockfdMirror1, char * buffer) {
+    int n;
+    // connfd is for client 
+    // sockfdMirror1 is for writing to Mirror1
+    // bzero(buffer, 1024);
+    // strcpy(buffer, "Send Message to Mirror1 %s\n");
+    // Write to mirror1
+    n = write(sockfdMirror1, buffer, strlen(buffer));
+
+    if (n < 0) {
+        printf("Error on writing\n");
+    }
+
+    // Read from mirror1
+    bzero(buffer, 1024);
+
+    n = read(sockfdMirror1, buffer, 1024);
+
+    if (n < 0) {
+        printf("Error on reading\n");
+    }
+
+    // Write to client now
+    n = write(connfd, buffer, strlen(buffer));
+    if (n < 0) {
+        printf("Error on writing\n");
+    }
+}
+
 void crequest(int count, int connfd, int sockfdMirror1){
     char buffer[1024];
     int n;
@@ -181,60 +240,13 @@ void crequest(int count, int connfd, int sockfdMirror1){
             printf("Closing connection on server side for client %d\n",count);
             break;
         }
-        else if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
-            bzero(buffer,1024);
-            listSubdirectories(buffer);
-            n = write(connfd, buffer, strlen(buffer));
-            if(n<0){
-                printf("Error on writing\n");
-            }
 
+        if(count%2==1){
+            handleRequestOnClient(count, connfd, buffer);
+        }else{
+            handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
         }
-        else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
-            bzero(buffer,1024);
-            listSubdirectoriesByCreationTime(buffer);
-            n = write(connfd, buffer, strlen(buffer));
-            if(n<0){
-                printf("Error on writing\n");
-            }
 
-        }
-        else if(strncmp("send mirror1",buffer,strlen("send mirror1"))==0) {
-            // connfd is for client 
-            // sockfdMirror1 is for writing to Mirror1
-            bzero(buffer,1024);
-            strcpy(buffer, "Send Message to Mirror1\n");
-            // Write to mirror1
-            n = write(sockfdMirror1, buffer, strlen(buffer));
-
-            if(n<0){
-                printf("Error on writing\n");
-            }
-
-            // Read from mirror1
-            bzero(buffer, 1024);
-
-            n = read(sockfdMirror1, buffer, 1024);
-
-            if(n<0){
-                printf("Error on reading\n");
-            }
-
-            // Write to client now
-            n = write(connfd, buffer, strlen(buffer));
-            if(n<0){
-                printf("Error on writing\n");
-            }
-        }
-        else{
-            printf("Message from client number %d: %s\n",count,buffer);
-            bzero(buffer,1024);
-            strcpy(buffer, "message received on server side no handler yet\n");
-            n = write(connfd, buffer, strlen(buffer));
-            if(n<0){
-                printf("Error on writing\n");
-            }
-        }
         bzero(buffer,1024);
     }
     close(connfd);   

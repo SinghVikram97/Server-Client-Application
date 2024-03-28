@@ -172,6 +172,8 @@ void crequest(int count, int connfd){
             printf("Error on reading\n");
         }
 
+        printf("Message recieved from Server %s\n",buffer);
+
         if(strncmp("quitc", buffer, strlen("quitc"))==0){
             printf("Closing connection on server side for client %d\n",count);
             break;
@@ -195,7 +197,6 @@ void crequest(int count, int connfd){
 
         }
         else{
-            printf("Message from Server %d: %s\n",count,buffer);
             bzero(buffer,1024);
             strcpy(buffer, "Sending you back my message from Mirror1\n");
             n = write(connfd, buffer, strlen(buffer));
