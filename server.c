@@ -7,33 +7,66 @@
 #include<netinet/in.h>
 #include <dirent.h>
 
+int compareStrings(const void *a, const void *b) {
+    const char *str1 = *(const char **)a;
+    const char *str2 = *(const char **)b;
+
+    // Check if either string starts with a dot
+    int dot1 = (str1[0] == '.');
+    int dot2 = (str2[0] == '.');
+
+    // Compare strings based on dot presence
+    if (!dot1 && !dot2) {
+        return strcasecmp(str1, str2);
+    } else if (dot1 && dot2) {
+        return strcasecmp(str1 + 1, str2 + 1); // Compare the second character
+    } else if (dot1) {
+        return strcasecmp(str1 + 1, str2); // Compare the second character of a and the first character of b
+    } else { // dot2
+        return strcasecmp(str1, str2 + 1); // Compare the first character of a and the second character of b
+    }
+}
+
 void listSubdirectories(char *buffer) {
     char *path = getenv("HOME");
     DIR *dir;
     struct dirent *entry;
     size_t buffer_length = 0;
-    
+    char *directories[1024]; // Assuming max 1024 subdirectories
+
     // Open directory
     if ((dir = opendir(path)) != NULL) {
+        int num_dirs = 0;
+        
         // Iterate through directory entries
         while ((entry = readdir(dir)) != NULL) {
             if (entry->d_type == DT_DIR) {
                 // Skip "." and ".."
                 if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                     continue;
-                
-                // Append directory name to buffer
-                size_t entry_length = strlen(entry->d_name);
-                if (buffer_length + entry_length + 2 <= 1024) {
-                    strcat(buffer, entry->d_name);
-                    strcat(buffer, "\n");
-                    buffer_length += entry_length + 1;
-                } else {
-                    fprintf(stderr, "Buffer overflow\n");
-                    break;
-                }
+
+                // Store directory name
+                directories[num_dirs++] = strdup(entry->d_name);
             }
         }
+        
+        // Sort directory names
+        qsort(directories, num_dirs, sizeof(char*), compareStrings);
+
+        // Append sorted directory names to buffer
+        for (int i = 0; i < num_dirs; i++) {
+            size_t entry_length = strlen(directories[i]);
+            if (buffer_length + entry_length + 2 <= 1024) {
+                strcat(buffer, directories[i]);
+                strcat(buffer, "\n");
+                buffer_length += entry_length + 1;
+            } else {
+                fprintf(stderr, "Buffer overflow\n");
+                break;
+            }
+            free(directories[i]); // Free allocated memory for directory name
+        }
+        
         closedir(dir);
     } else {
         // Unable to open directory
@@ -57,7 +90,6 @@ void crequest(int count, int connfd){
             printf("Closing connection on server side for client %d\n",count);
             break;
         }
-
         else if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
             bzero(buffer,1024);
             listSubdirectories(buffer);
@@ -105,7 +137,7 @@ int main(int argc, char *argv[]) {
    }
 
    listen(listenfd, 5);
-    int count=1;
+   int count=1;
    while(1){
       clilen = sizeof(cli_addr);
 
