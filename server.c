@@ -7,6 +7,20 @@
 #include<netinet/in.h>
 #include <dirent.h>
 
+// Struct to hold directory name and creation time
+// Struct to hold directory information
+typedef struct {
+    char name[256]; // Directory name
+    char creation_time[20]; // Creation time
+} DirectoryInfo;
+
+// Comparison function for qsort to sort directories based on creation time
+int compareDirectories(const void *a, const void *b) {
+    DirectoryInfo *dir1 = (DirectoryInfo *)a;
+    DirectoryInfo *dir2 = (DirectoryInfo *)b;
+    return strcmp(dir1->creation_time, dir2->creation_time);
+}
+
 void listSubdirectories(char *buffer) {
     char *path = getenv("HOME");
     DIR *dir;
@@ -42,6 +56,76 @@ void listSubdirectories(char *buffer) {
     }
 }
 
+
+// Function to list subdirectories in the order of their creation time
+void listSubdirectoriesByCreationTime(char *buffer) {
+    char *path = getenv("HOME");
+    DIR *dir;
+    struct dirent *entry;
+    size_t buffer_length = 0;
+    DirectoryInfo directories[1024];
+    int num_directories = 0;
+    
+    // Open directory
+    if ((dir = opendir(path)) != NULL) {
+        // Iterate through directory entries
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type == DT_DIR) {
+                // Skip "." and ".."
+                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                    continue;
+                
+                // Get directory path
+                char dir_path[1024];
+                snprintf(dir_path, sizeof(dir_path), "%s/%s", path, entry->d_name);
+                
+                // Get directory's status
+                struct stat file_stat;
+                if (stat(dir_path, &file_stat) == -1) {
+                    fprintf(stderr, "Error getting file status: %s\n", strerror(errno));
+                    continue;
+                }
+
+                // Convert creation time to string format
+                strftime(directories[num_directories].creation_time, sizeof(directories[num_directories].creation_time),
+                         "%Y-%m-%d %H:%M:%S", localtime(&(file_stat.st_ctime)));
+                
+                // Copy directory name
+                strncpy(directories[num_directories].name, entry->d_name, sizeof(directories[num_directories].name) - 1);
+                directories[num_directories].name[sizeof(directories[num_directories].name) - 1] = '\0';
+                
+                // Increment directory count
+                num_directories++;
+            }
+        }
+        closedir(dir);
+
+        // Sort directories based on creation time
+        qsort(directories, num_directories, sizeof(DirectoryInfo), compareDirectories);
+
+        // Copy sorted directories to buffer
+        for (int i = 0; i < num_directories; i++) {
+            // Get length of directory name
+            size_t entry_length = strlen(directories[i].name);
+
+            // Check for buffer overflow
+            if (buffer_length + entry_length + 2 <= 1024) {
+                // Append directory name to buffer
+                strcat(buffer, directories[i].name);
+                strcat(buffer, "\n");
+                buffer_length += entry_length + 1; // Add length of directory name and newline character
+            } else {
+                fprintf(stderr, "Buffer overflow\n");
+                break;
+            }
+        }
+    } else {
+        // Unable to open directory
+        perror("Error opening directory");
+        exit(EXIT_FAILURE);
+    }
+}
+
 void crequest(int count, int connfd){
     char buffer[1024];
     int n;
@@ -67,6 +151,16 @@ void crequest(int count, int connfd){
             }
 
         }
+       else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
+            bzero(buffer,1024);
+            listSubdirectoriesByCreationTime(buffer);
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
+
+        }
+
         else{
             printf("Message from client number %d: %s\n",count,buffer);
             bzero(buffer,1024);
