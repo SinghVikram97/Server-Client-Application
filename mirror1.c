@@ -9,11 +9,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <time.h>
-#include<netdb.h>
-#include<netinet/in.h>
-
-#define SERVER_IP "127.0.0.1"
-#define MIRROR1_PORT "8073"
 
 // Struct to hold directory name and creation time
 // Struct to hold directory information
@@ -166,66 +161,7 @@ void listSubdirectories(char *buffer) {
     }
 }
 
-void handleRequestOnClient(int count, int connfd, char *buffer){
-    int n;
-    if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
-            bzero(buffer,1024);
-            listSubdirectories(buffer);
-            n = write(connfd, buffer, strlen(buffer));
-            if(n<0){
-                printf("Error on writing\n");
-            }
-
-    }
-    else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
-            bzero(buffer,1024);
-            listSubdirectoriesByCreationTime(buffer);
-            n = write(connfd, buffer, strlen(buffer));
-            if(n<0){
-                printf("Error on writing\n");
-            }
-
-    }else{
-            printf("Message from client number %d: %s\n",count,buffer);
-            bzero(buffer,1024);
-            strcpy(buffer, "message received on server side no handler yet\n");
-            n = write(connfd, buffer, strlen(buffer));
-            if(n<0){
-                printf("Error on writing\n");
-            }
-    }
-}
-
-void handleRequestOnMirror1(int count, int connfd, int sockfdMirror1, char * buffer) {
-    int n;
-    // connfd is for client 
-    // sockfdMirror1 is for writing to Mirror1
-    // bzero(buffer, 1024);
-    // strcpy(buffer, "Send Message to Mirror1 %s\n");
-    // Write to mirror1
-    n = write(sockfdMirror1, buffer, strlen(buffer));
-
-    if (n < 0) {
-        printf("Error on writing\n");
-    }
-
-    // Read from mirror1
-    bzero(buffer, 1024);
-
-    n = read(sockfdMirror1, buffer, 1024);
-
-    if (n < 0) {
-        printf("Error on reading\n");
-    }
-
-    // Write to client now
-    n = write(connfd, buffer, strlen(buffer));
-    if (n < 0) {
-        printf("Error on writing\n");
-    }
-}
-
-void crequest(int count, int connfd, int sockfdMirror1){
+void crequest(int count, int connfd){
     char buffer[1024];
     int n;
     while(1){
@@ -236,17 +172,38 @@ void crequest(int count, int connfd, int sockfdMirror1){
             printf("Error on reading\n");
         }
 
+        printf("Message recieved from Server %s\n",buffer);
+
         if(strncmp("quitc", buffer, strlen("quitc"))==0){
             printf("Closing connection on server side for client %d\n",count);
             break;
         }
+        else if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
+            bzero(buffer,1024);
+            listSubdirectories(buffer);
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
 
-        if(count%2==1){
-            handleRequestOnClient(count, connfd, buffer);
-        }else{
-            handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
         }
+        else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
+            bzero(buffer,1024);
+            listSubdirectoriesByCreationTime(buffer);
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
 
+        }
+        else{
+            bzero(buffer,1024);
+            strcpy(buffer, "Sending you back my message from Mirror1\n");
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
+        }
         bzero(buffer,1024);
     }
     close(connfd);   
@@ -254,7 +211,6 @@ void crequest(int count, int connfd, int sockfdMirror1){
 }
 
 int main(int argc, char *argv[]) {
-   /* --------  Listen to Client Connections --------*/
    int listenfd, connfd, portno, n;
 
    struct sockaddr_in serv_addr, cli_addr;
@@ -277,38 +233,6 @@ int main(int argc, char *argv[]) {
    }
 
    listen(listenfd, 5);
-   /* --------  List to Client Connections End --------*/
-
-   /* --------  Open Socket to Mirror1  --------*/
-   
-   // Open socket to Mirror1
-   int sockfdMirror1, portnoMirror1;
-   struct sockaddr_in serv_addr_mirror1;
-   struct hostent *server_mirror1;
-   
-   portnoMirror1 = atoi(MIRROR1_PORT);
-   sockfdMirror1 = socket(AF_INET, SOCK_STREAM, 0);
-   
-   if(sockfdMirror1 < 0) {
-        printf("Error opening socket to mirror1\n");
-   }
-
-   server_mirror1 = gethostbyname(SERVER_IP);
-   
-   if(server_mirror1==NULL){
-        printf("No such host \n");
-   }
-   
-   serv_addr_mirror1.sin_family = AF_INET;
-   bcopy((char *)server_mirror1->h_addr_list[0], (char *) &serv_addr_mirror1.sin_addr.s_addr, server_mirror1->h_length);
-   serv_addr_mirror1.sin_port = htons(portnoMirror1);
-   
-   if(connect(sockfdMirror1, (struct sockaddr *) &serv_addr_mirror1, sizeof(serv_addr_mirror1))<0){
-       printf("Connection failed\n");
-   }
-
-   /* --------  Open Socket to Mirror1 End --------*/
-
    int count=1;
    while(1){
       clilen = sizeof(cli_addr);
@@ -321,7 +245,7 @@ int main(int argc, char *argv[]) {
 
       pid_t pid = fork();
       if(pid==0){
-            crequest(count, connfd, sockfdMirror1);
+            crequest(count, connfd);
             exit(0);
       }else{
         count++;
