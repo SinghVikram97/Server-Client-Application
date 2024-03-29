@@ -11,6 +11,8 @@
 #include <time.h>
 #include<netdb.h>
 #include<netinet/in.h>
+#include <fcntl.h>
+
 
 #define SERVER_IP "127.0.0.1"
 #define MIRROR1_PORT "8073"
@@ -167,6 +169,37 @@ void listSubdirectories(char *buffer) {
     }
 }
 
+void sendFile(int connfd, char *buffer) {
+    int n;
+    int fd = open("server.txt", O_RDONLY);
+    if (fd == -1) {
+        printf("Error opening file");
+        return;
+    }
+
+    off_t file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    // send file size to client
+    if (write(connfd, &file_size, sizeof(file_size)) < 0) {
+        perror("Error writing file size to socket");
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    ssize_t bytes_read;
+    while ((bytes_read = read(fd, buffer, 1024)) > 0) {
+        if (write(connfd, buffer, bytes_read) < 0) {
+            perror("Error writing to socket");
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+    }
+    printf("Finished\n");
+    // Close the file
+    close(fd);
+}
+
 void handleRequestOnClient(int count, int connfd, char *buffer){
     int n;
     if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
@@ -176,7 +209,6 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             if(n<0){
                 printf("Error on writing\n");
             }
-
     }
     else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
             bzero(buffer,1024);
@@ -185,7 +217,9 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             if(n<0){
                 printf("Error on writing\n");
             }
-
+    }else if(strncmp("file",buffer,strlen("file"))==0){
+            bzero(buffer,1024);
+            sendFile(connfd, buffer);
     }else{
             printf("Message from client number %d: %s\n",count,buffer);
             bzero(buffer,1024);
