@@ -350,7 +350,10 @@ void copy_file(const char *source, const char *destination_with_filename) {
     char destination_path[strlen(destination_with_filename) + strlen(file_name) + 2]; // +2 for '/' and null terminator
     sprintf(destination_path, "%s/%s", destination_with_filename, file_name);
 
-
+    if(strcmp(source,destination_path)==0)
+    {
+        return;
+    }
     // Create or open the destination file with appropriate permissions
     int destination_fd = open(destination_path, O_CREAT | O_WRONLY | O_TRUNC, 0744);
     if (destination_fd == -1) {
