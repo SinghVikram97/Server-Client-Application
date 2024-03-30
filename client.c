@@ -44,7 +44,7 @@ void processFileCommand(int sockfd, char *buffer) {
     }
 
     umask(0);
-    int fd = open("output_file.txt", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    int fd = open("clientfiles.zip", O_WRONLY | O_CREAT | O_TRUNC, 0777);
     if (fd == -1) {
         printf("Error opening file");
         return;
@@ -166,7 +166,9 @@ int validateCommand(char *buffer){
         } else {
             return 0;
         }
-    } else{
+    } else if(strcmp(args[0],"file")==0){ // TODO: REMOVE 
+        return 1;
+    }else{
         return 0;
     }
 }
