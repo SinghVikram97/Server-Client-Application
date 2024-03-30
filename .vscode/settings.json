@@ -4,6 +4,7 @@
         "types.h": "c",
         "stdio.h": "c",
         "dirent.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "time.h": "c"
     }
 }

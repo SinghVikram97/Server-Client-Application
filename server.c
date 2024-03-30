@@ -12,7 +12,7 @@
 #include<netdb.h>
 #include<netinet/in.h>
 #include <fcntl.h>
-
+#include <sys/wait.h>
 
 #define SERVER_IP "127.0.0.1"
 #define MIRROR1_PORT "8073"
@@ -24,6 +24,159 @@ typedef struct {
     char name[256]; // Directory name
     char creation_time[20]; // Creation time
 } DirectoryInfo;
+
+
+
+// Function to execute a command and store its output
+char* execute_command(const char* command) {
+    char* buffer = (char*)malloc(1024 * sizeof(char));
+    if (buffer == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    int pipefd[2];
+    pid_t pid;
+    int status;
+    int saved_stdout;
+    int saved_stdin;
+
+    // Save original file descriptors
+    saved_stdin = dup(STDIN_FILENO);
+    saved_stdout = dup(STDOUT_FILENO);
+
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+
+    pid = fork();
+
+    if (pid == -1) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) { // Child process
+        close(pipefd[0]); // Close unused read end of the pipe
+
+        // Redirect stdout to the write end of the pipe
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]); // Close the original write end of the pipe
+
+        // Execute the command
+        if (execl("/bin/sh", "sh", "-c", command, NULL) == -1) {
+            perror("execl");
+            exit(EXIT_FAILURE);
+        }
+    } else { // Parent process
+        close(pipefd[1]); // Close unused write end of the pipe
+
+        // Read the command output from the pipe
+        int bytes_read = read(pipefd[0], buffer, 1024 - 1);
+        if (bytes_read == -1) {
+            perror("read");
+            exit(EXIT_FAILURE);
+        }
+
+        buffer[bytes_read] = '\0'; // Null-terminate the buffer
+        close(pipefd[0]); // Close the read end of the pipe
+
+        // Wait for child process to finish
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+            fprintf(stderr, "Child process exited with error\n");
+            exit(EXIT_FAILURE);
+        }
+
+        // Restore original file descriptors
+        dup2(saved_stdin, STDIN_FILENO);
+        dup2(saved_stdout, STDOUT_FILENO);
+    }
+
+    return buffer;
+}
+
+// Function to get file information using stat command
+void getFileInfo(const char *filename, char *buffer) {
+    char command[512];
+
+    // Construct the stat command
+    snprintf(command, sizeof(command), "stat -c 'Birth: %%w' '%s'", filename);
+
+    // Execute the command and store the output
+    char *output = execute_command(command);
+
+    // Copy the output to the buffer
+    snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "%s", output);
+
+    free(output);
+}
+
+// Function to search for a file recursively
+void searchFileRecursive(const char *filename, const char *directory, char *buffer, int *found) {
+    DIR *dir;
+    struct dirent *entry;
+    struct stat file_stat;
+    char path[1024];
+
+    dir = opendir(directory);
+    if (dir == NULL) {
+        perror("opendir");
+        return;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        snprintf(path, sizeof(path), "%s/%s", directory, entry->d_name);
+        
+        // Ignore . and .. directories
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        if (stat(path, &file_stat) == -1) {
+            perror("stat");
+            continue;
+        }
+
+        if (S_ISDIR(file_stat.st_mode)) {
+            // If it's a directory, recursively search inside it
+            searchFileRecursive(filename, path, buffer, found);
+            if (*found) // If file found in subdirectory, stop the search
+                break;
+        } else if (strcmp(entry->d_name, filename) == 0) {
+            // If it's the desired file, get its information
+            snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "Name: %s\n", path);
+            snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "Size: %ld bytes\n", file_stat.st_size);
+            getFileInfo(path, buffer); //birthdate
+            snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "Permissions: %s%s%s%s%s%s%s%s%s%s\n",
+                     (S_ISDIR(file_stat.st_mode)) ? "d" : "-",
+                     (file_stat.st_mode & S_IRUSR) ? "r" : "-",
+                     (file_stat.st_mode & S_IWUSR) ? "w" : "-",
+                     (file_stat.st_mode & S_IXUSR) ? "x" : "-",
+                     (file_stat.st_mode & S_IRGRP) ? "r" : "-",
+                     (file_stat.st_mode & S_IWGRP) ? "w" : "-",
+                     (file_stat.st_mode & S_IXGRP) ? "x" : "-",
+                     (file_stat.st_mode & S_IROTH) ? "r" : "-",
+                     (file_stat.st_mode & S_IWOTH) ? "w" : "-",
+                     (file_stat.st_mode & S_IXOTH) ? "x" : "-");
+            *found = 1; // Set found flag
+            break;
+        }
+    }
+
+    closedir(dir);
+}
+
+// Function to search for a file recursively from the home directory
+void searchFile(const char *filename, char *buffer) {
+    int found = 0; // Flag to track if file is found
+    searchFileRecursive(filename, getenv("HOME"), buffer, &found);
+
+    if (!found) {
+        snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "File not found.\n");
+    }
+}
+
 
 // Comparison function for qsort to sort directories based on creation time
 int compareDirectories(const void *a, const void *b) {
@@ -199,7 +352,24 @@ void sendFile(int connfd, char *buffer) {
     // Close the file
     close(fd);
 }
+// Function to extract filename from a given string
+char* extract_filename(const char* str) {
+    // Find the position of the space character ' ' in the string
+    char* space_pos = strchr(str, ' ');
+    if (space_pos != NULL) {
+        // Calculate the length of the filename
+        int filename_length = strlen(space_pos + 1);
 
+        // Allocate memory for the filename
+        char* file_name = (char*)malloc((filename_length + 1) * sizeof(char));
+
+        // Copy the filename to the new buffer
+        strcpy(file_name, space_pos + 1);
+        return file_name;
+    } else {
+        return NULL; // No space character found
+    }
+}
 void handleRequestOnClient(int count, int connfd, char *buffer){
     int n;
     if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
@@ -217,7 +387,21 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             if(n<0){
                 printf("Error on writing\n");
             }
-    }else if(strncmp("file",buffer,strlen("file"))==0){
+    }
+    else if(strncmp("w24fn",buffer,strlen("w24fn"))==0){
+            char* file_name = extract_filename(buffer);
+            if (file_name[strlen(file_name) - 1] == '\n')
+            {
+                file_name[strlen(file_name) - 1] = '\0';
+            }
+            // Search for the file recursively from the home directory
+            searchFile(file_name, buffer);
+            n = write(connfd, buffer, strlen(buffer));
+            if(n<0){
+                printf("Error on writing\n");
+            }
+         }
+    else if(strncmp("file",buffer,strlen("file"))==0){
             bzero(buffer,1024);
             sendFile(connfd, buffer);
     }else{
