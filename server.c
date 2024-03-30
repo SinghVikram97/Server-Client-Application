@@ -13,6 +13,8 @@
 #include<netinet/in.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <libgen.h>
+#include <ctype.h>
 
 #define SERVER_IP "127.0.0.1"
 #define MIRROR1_PORT "8073"
@@ -370,6 +372,125 @@ char* extract_filename(const char* str) {
         return NULL; // No space character found
     }
 }
+void copy_file(const char *source, const char *destination_with_filename) {
+    // Open the source file in readonly mode
+    int source_fd = open(source, O_RDONLY);
+    if (source_fd == -1) {
+        printf("Error opening source file\n");
+        return;
+    }
+
+    // Find the last '/' in the source path
+    const char *last_slash = strrchr(source, '/');
+    const char *file_name = (last_slash != NULL) ? last_slash + 1 : source;
+
+    // Append the file name to the destination path
+    char destination_path[strlen(destination_with_filename) + strlen(file_name) + 2]; // +2 for '/' and null terminator
+    sprintf(destination_path, "%s/%s", destination_with_filename, file_name);
+
+
+    // Create or open the destination file with appropriate permissions
+    int destination_fd = open(destination_path, O_CREAT | O_WRONLY | O_TRUNC, 0744);
+    if (destination_fd == -1) {
+        printf("Error creating/opening destination file\n");
+        close(source_fd);
+        return;
+    }
+
+    char buffer[1024];
+    ssize_t bytes_read;
+
+    // Read from source and write to destination
+    while ((bytes_read = read(source_fd, buffer, sizeof(buffer))) > 0) {
+        if (write(destination_fd, buffer, bytes_read) != bytes_read) {
+            printf("Error writing to destination file\n");
+            close(source_fd);
+            close(destination_fd);
+            return;
+        }
+    }
+
+    if (bytes_read == -1) {
+        printf("Error reading from source file\n");
+    }
+
+    // Close file descriptors
+    close(source_fd);
+    close(destination_fd);
+}
+
+void create_tar_gz(const char *folder) {
+    char command[1024];
+    snprintf(command, sizeof(command), "tar -czf temp.tar.gz -C %s .", folder);
+    //system(command);
+    char* buffer = execute_command(command);
+}
+
+void delete_folder(const char *folder) {
+    char command[1024];
+    snprintf(command, sizeof(command), "rm -rf \"%s\"", folder);
+    char* buffer = execute_command(command);
+}
+
+char *get_file_extension(const char *filename) {
+    char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return NULL;  // No extension found or filename starts with '.'
+    return dot + 1;  // Return the extension (excluding the dot)
+}
+
+void get_files(const char *dir_path,long size1,long size2, const char *temp_folder) {
+    DIR *dir;
+    struct dirent *entry;
+    struct stat file_stat;
+    char file_path[1024];
+    
+    dir = opendir(dir_path);
+    if (dir == NULL) {
+        perror("opendir");
+        return;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, entry->d_name);
+
+        if (lstat(file_path, &file_stat) == -1) {
+            perror("lstat");
+            continue;
+        }
+
+        if (S_ISDIR(file_stat.st_mode)) {
+            get_files(file_path, size1, size2, temp_folder);
+        } else if (S_ISREG(file_stat.st_mode)) {
+            char *extension = get_file_extension(entry->d_name);
+            if (extension != NULL && file_stat.st_size >= size1 && file_stat.st_size <= size2) {
+                //printf("Copying file: %s\n", file_path);
+                copy_file(file_path, temp_folder);
+            }
+        }
+    }
+
+    closedir(dir);
+}
+void extractLongs(char* string, long *size1, long *size2) {
+    char *token;
+    int count = 0;
+    // Skip the first token "w24z"
+    token = strtok(string, " ");
+    token = strtok(NULL, " ");
+    while (token != NULL && count < 2) {
+        if (count == 0) {
+            *size1 = atol(token);
+        } else if (count == 1) {
+            *size2 = atol(token);
+        }
+        token = strtok(NULL, " ");
+        count++;
+    }
+}
+
 void handleRequestOnClient(int count, int connfd, char *buffer){
     int n;
     if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
@@ -401,6 +522,29 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
                 printf("Error on writing\n");
             }
          }
+    else if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
+            long size1, size2;
+            extractLongs(buffer, &size1, &size2);
+
+            char temp_folder[1024];
+            snprintf(temp_folder, sizeof(temp_folder), "%s/temp", getenv("HOME"));
+
+            // Create temp folder if it doesn't exist
+            mkdir(temp_folder, 0700);
+
+            get_files(getenv("HOME"), size1, size2, temp_folder);
+
+            // Create tar.gz file
+            create_tar_gz(temp_folder);
+
+            // Delete temp folder
+            delete_folder(temp_folder);
+            // n = write(connfd, buffer, strlen(buffer));
+            // if(n<0){
+            //     printf("Error on writing\n");
+            // }
+         }
+         
     else if(strncmp("file",buffer,strlen("file"))==0){
             bzero(buffer,1024);
             sendFile(connfd, buffer);
