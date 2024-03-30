@@ -10,6 +10,11 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/wait.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <libgen.h>
+#include <ctype.h>
+
 // Struct to hold directory name and creation time
 // Struct to hold directory information
 typedef struct {
