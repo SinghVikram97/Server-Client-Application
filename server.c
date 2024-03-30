@@ -324,7 +324,7 @@ void listSubdirectories(char *buffer) {
 
 void sendFile(int connfd, char *buffer) {
     int n;
-    int fd = open("server.txt", O_RDONLY);
+    int fd = open("serverfiles.zip", O_RDONLY);
     if (fd == -1) {
         printf("Error opening file");
         return;
@@ -401,7 +401,7 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
                 printf("Error on writing\n");
             }
          }
-    else if(strncmp("file",buffer,strlen("file"))==0){
+    else if(strncmp("file",buffer,strlen("file"))==0){ // TODO: REMOVE 
             bzero(buffer,1024);
             sendFile(connfd, buffer);
     }else{
