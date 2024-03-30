@@ -71,6 +71,106 @@ void processFileCommand(int sockfd, char *buffer) {
     }
 }
 
+int isValidDateFormat(const char *date) {
+    // Check if the date string matches the format YYYY-MM-DD
+    if (strlen(date) != 10) {
+        return 0;
+    }
+
+    // Verify the positions of '-' characters
+    if (date[4] != '-' || date[7] != '-') {
+        return 0;
+    }
+
+    // Verify the positions of digits
+    for (int i = 0; i < 10; i++) {
+        if (i == 4 || i == 7) {
+            continue; // Skip '-' characters
+        }
+        if (date[i] < '0' || date[i] > '9') {
+            return 0; // Non-digit characters
+        }
+    }
+
+    return 1;
+}
+
+int validateCommand(char *buffer){
+     if (buffer == NULL || (strlen(buffer) == 1 && buffer[0] == '\n')) {
+        return 0; 
+    }
+
+    int len = strlen(buffer);
+
+    if (buffer[len - 1] == '\n') {
+        buffer[len - 1] = '\0';
+    }
+
+    char *args[10];
+    char *token;
+    int argIndex = 0;
+    int MAX_ARGS=10;
+
+    char bufferCopy[1024];
+    strcpy(bufferCopy, buffer);
+
+    token = strtok(bufferCopy, " \n"); 
+    while (token != NULL && argIndex < MAX_ARGS - 1) {
+        args[argIndex] = token;
+        argIndex++;
+        token = strtok(NULL, " \n");
+    }
+    args[argIndex] = NULL; 
+
+    int numArguments=argIndex;
+
+
+    if(strcmp(args[0], "dirlist")==0){
+        printf("%d\n",numArguments);
+        if(numArguments==2 && (strcmp(args[1],"-t")==0 || strcmp(args[1],"-a")==0)){
+            return 1;
+        }else{
+            return 0;
+        }
+    }else if (strcmp(args[0], "w24fn") == 0) {
+        if (numArguments == 2) {
+            return 1;
+        } else {
+            return 0;
+        }
+    } else if (strcmp(args[0], "w24fz") == 0) {
+        if (numArguments == 3) {
+            int size1 = atoi(args[1]);
+            int size2 = atoi(args[2]);
+            if (size1 >= 0 && size2 >= 0 && size1 <= size2) {
+                return 1;
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    } else if (strcmp(args[0], "w24ft") == 0) {
+        if (numArguments >= 2 && numArguments <= 4) {
+            return 1; 
+        } else {
+            return 0;
+        }
+    } else if ((strcmp(args[0], "w24fdb") == 0) || strcmp(args[0], "w24fda")==0 ) {
+        if (numArguments == 2) {
+            if (isValidDateFormat(args[1])==1) {
+                return 1;
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    } else{
+        return 0;
+    }
+}
+
 int main(int argc, char *argv[]) {
     int sockfd, portno;
     struct sockaddr_in serv_addr;
@@ -111,7 +211,14 @@ int main(int argc, char *argv[]) {
             }
             printf("Closing connection on client side\n");
             break;
-        }else if(strncmp(buffer,"dirlist -a",strlen("dirlist -a"))==0){
+        }
+
+        if(validateCommand(buffer)!=1){
+            printf("Invalid command\n\n");
+            continue;
+        }
+
+        if(strncmp(buffer,"dirlist -a",strlen("dirlist -a"))==0){
             processCommand(sockfd, buffer);
         }else if(strncmp(buffer,"dirlist -t",strlen("dirlist -t"))==0){
             processCommand(sockfd, buffer);           
@@ -133,6 +240,8 @@ int main(int argc, char *argv[]) {
         else{
             printf("Invalid command, please try again\n");
         }
+
+        printf("\n");
     }
     close(sockfd);
     return 0;
