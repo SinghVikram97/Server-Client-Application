@@ -8,6 +8,7 @@
 #include<netdb.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <time.h>
 
 void processCommand(int sockfd, char *buffer) {
     int n;
@@ -29,12 +30,29 @@ void processCommand(int sockfd, char *buffer) {
 }
 
 void processFileCommand(int sockfd, char *buffer) {
-    int n;
-    n = write(sockfd, buffer, strlen(buffer));
+     int n;
 
-    if(n<0){
-        printf("Error on writing\n");
-    }    
+    // Write command to server
+    n = write(sockfd, buffer, strlen(buffer));
+    if (n < 0) {
+        perror("Error writing to socket");
+        return;
+    }
+
+    // Read the start signal
+    char start_signal[15];
+    ssize_t bytes_receivedSignal = read(sockfd, start_signal, 14);
+    if (bytes_receivedSignal < 0) {
+        perror("Error reading start signal from socket");
+        return;
+    }
+    start_signal[14] = '\0'; // Null-terminate the string
+    printf("Received start signal (%ld bytes): %s\n", bytes_receivedSignal, start_signal);
+
+    if (strcmp(start_signal, "DONOT_TRANSFER") == 0) {
+        printf("No file found\n");
+        return;
+    }
 
     // read file size
     off_t file_size;
@@ -43,19 +61,35 @@ void processFileCommand(int sockfd, char *buffer) {
         return;
     }
 
+    // Generate timestamp
+    char timestamp[20];
+    time_t current_time;
+    struct tm *timeinfo;
+
+    // Get current time
+    time(&current_time);
+
+    // Convert to local time
+    timeinfo = localtime(&current_time);
+
+    // Format timestamp
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d%H%M%S", timeinfo);
+
+    // Construct the filename with the timestamp
+    char filename[50]; // Adjust size as needed
+    snprintf(filename, sizeof(filename), "./temp_%s.tar.gz", timestamp);
+
     umask(0);
-    int fd = open("clientfiles.zip", O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0777);
     if (fd == -1) {
-        printf("Error opening file");
+        perror("Error opening file");
         return;
     }
-
-    bzero(buffer, 1024);
 
     ssize_t bytes_received;
     off_t total_bytes_received = 0;
     while (total_bytes_received < file_size &&
-           (bytes_received = read(sockfd, buffer, sizeof(buffer))) > 0) {
+           (bytes_received = read(sockfd, buffer, 1024)) > 0) {
         ssize_t bytes_written = write(fd, buffer, bytes_received);
         if (bytes_written < 0) {
             perror("Error writing to file");
@@ -126,7 +160,6 @@ int validateCommand(char *buffer){
 
 
     if(strcmp(args[0], "dirlist")==0){
-        printf("%d\n",numArguments);
         if(numArguments==2 && (strcmp(args[1],"-t")==0 || strcmp(args[1],"-a")==0)){
             return 1;
         }else{
@@ -168,7 +201,10 @@ int validateCommand(char *buffer){
         }
     } else if(strcmp(args[0],"file")==0){ // TODO: REMOVE 
         return 1;
-    }else{
+    } else if(strcmp(args[0],"hi")==0){
+        return 1;
+    }
+    else{
         return 0;
     }
 }
@@ -227,7 +263,7 @@ int main(int argc, char *argv[]) {
         }else if(strncmp(buffer,"w24fn",strlen("w24fn"))==0){
             processCommand(sockfd, buffer);
         }else if(strncmp(buffer,"w24fz",strlen("w24fz"))==0){
-            processCommand(sockfd, buffer);
+            processFileCommand(sockfd, buffer);
         }else if(strncmp(buffer,"w24ft",strlen("w24ft"))==0){
             processCommand(sockfd, buffer);
         }else if(strncmp(buffer,"w24fdb",strlen("w24fdb"))==0){
