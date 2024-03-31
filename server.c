@@ -326,7 +326,8 @@ void listSubdirectories(char *buffer) {
 
 void sendFile(int connfd, char *buffer) {
     int n;
-    int fd = open("serverfiles.zip", O_RDONLY);
+ 
+    int fd = open("./temp.tar.gz", O_RDONLY);
     if (fd == -1) {
         printf("Error opening file");
         return;
