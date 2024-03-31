@@ -581,7 +581,7 @@ void copyFilesWithExtensions(const char *directory, const char *extensions[], in
                         snprintf(tempFilePath, sizeof(tempFilePath), "%s/temp", getenv("HOME"));
                         *found=1;
                         //snprintf(tempFilePath, sizeof(tempFilePath), "%s/%s", tempFolder, entry->d_name);
-                        copy_file(filepath, tempFilePath);
+                        copy_file(filepath, tempFilePath, found);
                       
                     }
                 }
@@ -698,11 +698,8 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
 
     }
        else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
-
-
             const char *extensions[MAX_EXTENSIONS];  // Array to store pointers to strings
             int numExtensions = 0;  // Variable to keep track of the number of extensions
-            int found=0;
             if (buffer[strlen(buffer) - 1] == '\n')
             {
                 buffer[strlen(buffer) - 1] = '\0';
@@ -726,23 +723,26 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             // Start copying files with specified extensions from the home directory  // Create temp folder if it doesn't exist
             mkdir(temp_folder, 0700);
 
+            int found=0;
             copyFilesWithExtensions(getenv("HOME"), extensions, numExtensions, &found);
-            if(!found)
-            {
-                bzero(buffer,1024);
-                strcpy(buffer, "No file found\n");
-                n = write(connfd, buffer, strlen(buffer));
-            }
-            // Create tar.gz file
-            create_tar_gz(temp_folder);
+            
+            if(found==1){
+                // Create tar.gz file
+                create_tar_gz(temp_folder);
 
-            // Delete temp folder
-            delete_folder(temp_folder);
-            bzero(buffer,1024);
-            // n = write(connfd, buffer, strlen(buffer));
-            // if(n<0){
-            //     printf("Error on writing\n");
-            // }
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }else{
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }
+
     }
     else if(strncmp("file",buffer,strlen("file"))==0){ // TODO: REMOVE 
             bzero(buffer,1024);
