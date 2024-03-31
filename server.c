@@ -19,6 +19,8 @@
 #define SERVER_IP "127.0.0.1"
 #define MIRROR1_PORT "8073"
 #define MIRROR2_PORT "8074"
+#define MAX_EXTENSIONS 3
+#define MAX_PATH_LENGTH 1024
 
 // Struct to hold directory name and creation time
 // Struct to hold directory information
@@ -514,6 +516,122 @@ void extractLongs(char* string, long *size1, long *size2) {
         count++;
     }
 }
+void copyFilesWithExtensions(const char *directory, const char *extensions[], int numExtensions, int * found) {
+    DIR *dir;
+    struct dirent *entry;
+    struct stat fileStat;
+    char filepath[MAX_PATH_LENGTH];
+    char tempFolder[MAX_PATH_LENGTH];
+
+    // Get home directory
+    const char *homeDir = getenv("HOME");
+    if (homeDir == NULL) {
+        perror("Error getting home directory");
+        return;
+    }
+
+    // Construct temp folder path
+    snprintf(tempFolder, sizeof(tempFolder), "%s/temp", homeDir);
+
+    // Open directory
+    if ((dir = opendir(directory)) == NULL) {
+        perror("Error opening directory");
+        return;
+    }
+
+    // Debug point: indicate when a directory is being opened
+   // printf("Opening directory: %s\n", directory);
+
+    // Iterate over directory entries
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip "." and ".."
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        // Construct full file path
+        snprintf(filepath, sizeof(filepath), "%s/%s", directory, entry->d_name);
+
+        // Get file information
+        if (lstat(filepath, &fileStat) < 0) {
+            perror("Error getting file information");
+            continue;
+        }
+
+        // Check if it's a regular file and has an extension
+        if (S_ISREG(fileStat.st_mode)) {
+            char *fileExtension = strrchr(entry->d_name, '.');
+            if (fileExtension != NULL) {
+                // Check if the file extension matches any of the given extensions
+                for (int i = 0; i < numExtensions; i++) {
+                    // Add period to extension if not present
+                    char extensionWithPeriod[MAX_PATH_LENGTH];
+                    if (extensions[i][0] == '.') {
+                        strcpy(extensionWithPeriod, extensions[i]);
+                    } else {
+                        snprintf(extensionWithPeriod, sizeof(extensionWithPeriod), ".%s", extensions[i]);
+                    }
+
+                    if (strcmp(fileExtension, extensionWithPeriod) == 0) {
+                        // Debug point: indicate when a matching file is found
+                       // printf("Found matching file: %s\n", filepath);
+
+                        // Copy the file to the temp folder
+                        char tempFilePath[MAX_PATH_LENGTH * 2]; // Increased buffer size
+                        snprintf(tempFilePath, sizeof(tempFilePath), "%s/temp", getenv("HOME"));
+                        *found=1;
+                        //snprintf(tempFilePath, sizeof(tempFilePath), "%s/%s", tempFolder, entry->d_name);
+                        copy_file(filepath, tempFilePath);
+                      
+                    }
+                }
+            }
+        } else if (S_ISDIR(fileStat.st_mode)) {
+            // Debug point: indicate when a directory is being recursively processed
+            //printf("Recursively processing directory: %s\n", filepath);
+            // Recursively call the function for subdirectories
+            copyFilesWithExtensions(filepath, extensions, numExtensions,found);
+        }
+    }
+
+    closedir(dir);
+}
+void extractExtensions(const char *buffer, const char *extensions[MAX_EXTENSIONS], int *numExtensions) {
+    const char *token;
+    *numExtensions = 0;
+
+    // Tokenize the buffer string using space as delimiter
+    token = strtok((char *)buffer, " ");
+    
+    while (token != NULL && *numExtensions < MAX_EXTENSIONS) {
+        // Skip "w24ft" prefix if present
+        if (strcmp(token, "w24ft") == 0) {
+            token = strtok(NULL, " ");
+            continue;
+        }
+        extensions[(*numExtensions)++] = token;
+        token = strtok(NULL, " ");
+    }
+}
+void tokenizeString(const char *input, const char *delimiter, const char **tokens, int *numTokens) {
+    char *inputCopy = strdup(input); // Make a copy of the input string
+    char *token = strtok(inputCopy, delimiter);
+    
+    *numTokens = 0; // Initialize the number of tokens
+    
+    while (token != NULL && *numTokens < MAX_EXTENSIONS) {
+        // Exclude "w24ft" token
+        if (strcmp(token, "w24ft") != 0) {
+            // Allocate memory for the token and copy it
+            tokens[*numTokens] = strdup(token);
+            (*numTokens)++; // Increment the number of tokens
+        }
+        token = strtok(NULL, delimiter); // Move to the next token
+    }
+    
+    free(inputCopy); // Free the dynamically allocated memory
+}
+
 
 void handleRequestOnClient(int count, int connfd, char *buffer){
     int n;
@@ -578,6 +696,53 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
                 sendFile(connfd, buffer, found);
             }
 
+    }
+       else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
+
+
+            const char *extensions[MAX_EXTENSIONS];  // Array to store pointers to strings
+            int numExtensions = 0;  // Variable to keep track of the number of extensions
+            int found=0;
+            if (buffer[strlen(buffer) - 1] == '\n')
+            {
+                buffer[strlen(buffer) - 1] = '\0';
+            }
+            // Tokenize the input string based on spaces
+            tokenizeString(buffer, " \n", extensions, &numExtensions);
+
+            extractExtensions(buffer, extensions, &numExtensions);
+            //printf("%d\n",numExtensions);
+            if (numExtensions < 1 || numExtensions > MAX_EXTENSIONS) {
+            printf("Error: Number of extensions should be between 1 and 3.\n");
+            return;
+            }
+            char temp_folder[1024];
+            snprintf(temp_folder, sizeof(temp_folder), "%s/temp", getenv("HOME"));
+            // for(int i=0;i<numExtensions;i++)
+            // {
+            //     printf("%s\n",extensions[i]);
+            // }
+
+            // Start copying files with specified extensions from the home directory  // Create temp folder if it doesn't exist
+            mkdir(temp_folder, 0700);
+
+            copyFilesWithExtensions(getenv("HOME"), extensions, numExtensions, &found);
+            if(!found)
+            {
+                bzero(buffer,1024);
+                strcpy(buffer, "No file found\n");
+                n = write(connfd, buffer, strlen(buffer));
+            }
+            // Create tar.gz file
+            create_tar_gz(temp_folder);
+
+            // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            // n = write(connfd, buffer, strlen(buffer));
+            // if(n<0){
+            //     printf("Error on writing\n");
+            // }
     }
     else if(strncmp("file",buffer,strlen("file"))==0){ // TODO: REMOVE 
             bzero(buffer,1024);
