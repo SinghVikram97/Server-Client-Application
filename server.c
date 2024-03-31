@@ -324,15 +324,34 @@ void listSubdirectories(char *buffer) {
     }
 }
 
-void sendFile(int connfd, char *buffer) {
-    int n;
- 
+void sendFile(int connfd, char *buffer, int found) {
+
+    if(found==0){
+         // Signal that no file transfer
+        const char *start_signal = "DONOT_TRANSFER";
+        ssize_t start_signal_len = strlen(start_signal);
+
+        int n = write(connfd, start_signal, start_signal_len);
+        printf("DONOT_TRANSFER bytes written %d\n",n);
+        return;
+    }
+    
+
+    // Signal the start of file transfer
+    const char *start_signal = "START_TRANSFER";
+    ssize_t start_signal_len = strlen(start_signal);
+
+    int n = write(connfd, start_signal, start_signal_len);
+    printf("START_TRANSFER bytes written %d\n",n);
+   
+
     int fd = open("./temp.tar.gz", O_RDONLY);
     if (fd == -1) {
-        printf("Error opening file");
+        perror("Error opening file");
         return;
     }
 
+    // Get file size
     off_t file_size = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
 
@@ -352,7 +371,6 @@ void sendFile(int connfd, char *buffer) {
         }
     }
     printf("Finished\n");
-    // Close the file
     close(fd);
 }
 // Function to extract filename from a given string
@@ -373,7 +391,7 @@ char* extract_filename(const char* str) {
         return NULL; // No space character found
     }
 }
-void copy_file(const char *source, const char *destination_with_filename) {
+void copy_file(const char *source, const char *destination_with_filename, int *found) {
     // Open the source file in readonly mode
     int source_fd = open(source, O_RDONLY);
     if (source_fd == -1) {
@@ -418,6 +436,8 @@ void copy_file(const char *source, const char *destination_with_filename) {
         printf("Error reading from source file\n");
     }
 
+    *found=1;
+
     // Close file descriptors
     close(source_fd);
     close(destination_fd);
@@ -442,7 +462,7 @@ char *get_file_extension(const char *filename) {
     return dot + 1;  // Return the extension (excluding the dot)
 }
 
-void get_files(const char *dir_path,long size1,long size2, const char *temp_folder) {
+void get_files(const char *dir_path,long size1,long size2, const char *temp_folder, int *found) {
     DIR *dir;
     struct dirent *entry;
     struct stat file_stat;
@@ -466,12 +486,12 @@ void get_files(const char *dir_path,long size1,long size2, const char *temp_fold
         }
 
         if (S_ISDIR(file_stat.st_mode)) {
-            get_files(file_path, size1, size2, temp_folder);
+            get_files(file_path, size1, size2, temp_folder, found);
         } else if (S_ISREG(file_stat.st_mode)) {
             char *extension = get_file_extension(entry->d_name);
             if (extension != NULL && file_stat.st_size >= size1 && file_stat.st_size <= size2) {
                 //printf("Copying file: %s\n", file_path);
-                copy_file(file_path, temp_folder);
+                copy_file(file_path, temp_folder, found);
             }
         }
     }
@@ -536,22 +556,32 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             // Create temp folder if it doesn't exist
             mkdir(temp_folder, 0700);
 
-            get_files(getenv("HOME"), size1, size2, temp_folder);
+            int found=0;
 
-            // Create tar.gz file
-            create_tar_gz(temp_folder);
+            get_files(getenv("HOME"), size1, size2, temp_folder, &found);
 
-            // Delete temp folder
-            delete_folder(temp_folder);
-            bzero(buffer,1024);
-            // n = write(connfd, buffer, strlen(buffer));
-            // if(n<0){
-            //     printf("Error on writing\n");
-            // }
+            
+            if(found==1){
+                // Create tar.gz file
+                create_tar_gz(temp_folder);
+
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }else{
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }
+
     }
     else if(strncmp("file",buffer,strlen("file"))==0){ // TODO: REMOVE 
             bzero(buffer,1024);
-            sendFile(connfd, buffer);
+            sendFile(connfd, buffer,1);
     }else{
             printf("Message from client number %d: %s\n",count,buffer);
             bzero(buffer,1024);
