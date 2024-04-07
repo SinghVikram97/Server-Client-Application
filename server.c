@@ -786,6 +786,135 @@ void handleRequestOnMirror1(int count, int connfd, int sockfdMirror1, char * buf
     }
 }
 
+void handleFileRequestsOnMirror1(int count, int connfd, int sockfdMirror1, char * buffer) {
+    int n;
+    // connfd is for client 
+    // sockfdMirror1 is for writing to Mirror1
+
+    // Write to mirror1 the command
+    n = write(sockfdMirror1, buffer, strlen(buffer));
+
+    if (n < 0) {
+        printf("Error on writing\n");
+    }
+
+
+    // Read like a client from mirro1
+    // Read the start signal
+    char start_signal[15];
+    ssize_t bytes_receivedSignal = read(sockfdMirror1, start_signal, 14);
+    if (bytes_receivedSignal < 0) {
+        perror("Error reading start signal from socket");
+        return;
+    }
+
+    start_signal[14] = '\0'; // Null-terminate the string
+    printf("Received start signal (%ld bytes): %s\n", bytes_receivedSignal, start_signal);
+
+    // Recieved no file found from mirror1
+    if (strcmp(start_signal, "DONOT_TRANSFER") == 0) {
+        // send same to client
+        const char *start_signal = "DONOT_TRANSFER";
+        ssize_t start_signal_len = strlen(start_signal);
+
+        int n = write(connfd, start_signal, start_signal_len);
+        printf("DONOT_TRANSFER bytes written %d\n",n);
+        return;
+        return;
+    }
+
+    // read file size
+    off_t file_size;
+    if (read(sockfdMirror1, &file_size, sizeof(file_size)) < 0) {
+        perror("Error reading file size from socket");
+        return;
+    }
+
+    // Generate timestamp
+    char timestamp[20];
+    time_t current_time;
+    struct tm *timeinfo;
+
+    // Get current time
+    time(&current_time);
+
+    // Convert to local time
+    timeinfo = localtime(&current_time);
+
+    // Format timestamp
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d%H%M%S", timeinfo);
+
+    // Construct the filename with the timestamp
+    char filename[50]; // Adjust size as needed
+    snprintf(filename, sizeof(filename), "./temp_%s.tar.gz", timestamp);
+
+    umask(0);
+    int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+    if (fd == -1) {
+        perror("Error opening file");
+        return;
+    }
+
+    ssize_t bytes_received;
+    off_t total_bytes_received = 0;
+    while (total_bytes_received < file_size &&
+           (bytes_received = read(sockfdMirror1, buffer, 1024)) > 0) {
+        ssize_t bytes_written = write(fd, buffer, bytes_received);
+        if (bytes_written < 0) {
+            perror("Error writing to file");
+            close(fd);
+            return;
+        }
+        total_bytes_received += bytes_written;
+    }
+    printf("Finished\n");
+    close(fd);
+    if (bytes_received < 0) {
+        perror("Error reading from socket");
+    }
+
+
+    // Send back to client like server
+    // Signal the start of file transfer
+    const char *start_signalToClient = "START_TRANSFER";
+    ssize_t start_signal_len = strlen(start_signalToClient);
+
+    n = write(connfd, start_signalToClient, start_signal_len);
+    printf("START_TRANSFER bytes written %d\n",n);
+   
+
+    fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+        perror("Error opening file");
+        return;
+    }
+
+    // Get file size
+    file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    // send file size to client
+    if (write(connfd, &file_size, sizeof(file_size)) < 0) {
+        perror("Error writing file size to socket");
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    ssize_t bytes_read;
+    while ((bytes_read = read(fd, buffer, 1024)) > 0) {
+        if (write(connfd, buffer, bytes_read) < 0) {
+            perror("Error writing to socket");
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+    }
+    printf("Finished\n");
+    close(fd);
+    
+}
+
+
+
 void handleRequestOnMirror2(int count, int connfd, int sockfdMirror2, char * buffer) {
     int n;
     // connfd is for client 
@@ -832,7 +961,14 @@ void crequest(int count, int connfd, int sockfdMirror1, int sockfdMirror2){
         if(count%3==1){
             handleRequestOnClient(count, connfd, buffer);
         }else if(count%3==2){
-            handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
+            if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
+                handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+            }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
+                handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+            }
+            else{
+                handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
+            }
         }else if(count%3==0){
             handleRequestOnMirror2(count, connfd, sockfdMirror2, buffer);
         }
