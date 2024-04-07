@@ -963,7 +963,10 @@ void crequest(int count, int connfd, int sockfdMirror1, int sockfdMirror2){
         }else if(count%3==2){
             if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
                 handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
-            }else{
+            }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
+                handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+            }
+            else{
                 handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
             }
         }else if(count%3==0){
