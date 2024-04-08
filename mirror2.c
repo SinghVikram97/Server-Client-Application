@@ -14,6 +14,8 @@
 #include <sys/wait.h>
 #include <libgen.h>
 #include <ctype.h>
+#include<netdb.h>
+#include<netinet/in.h>
 
 #define MAX_EXTENSIONS 3
 #define MAX_PATH_LENGTH 1024
@@ -319,6 +321,58 @@ void listSubdirectories(char *buffer) {
         exit(EXIT_FAILURE);
     }
 }
+
+void sendFile(int connfd, char *buffer, int found) {
+
+    if(found==0){
+         // Signal that no file transfer
+        const char *start_signal = "DONOT_TRANSFER";
+        ssize_t start_signal_len = strlen(start_signal);
+
+        int n = write(connfd, start_signal, start_signal_len);
+        printf("DONOT_TRANSFER bytes written %d\n",n);
+        return;
+    }
+    
+
+    // Signal the start of file transfer
+    const char *start_signal = "START_TRANSFER";
+    ssize_t start_signal_len = strlen(start_signal);
+
+    int n = write(connfd, start_signal, start_signal_len);
+    printf("START_TRANSFER bytes written %d\n",n);
+   
+
+    int fd = open("./temp.tar.gz", O_RDONLY);
+    if (fd == -1) {
+        perror("Error opening file");
+        return;
+    }
+
+    // Get file size
+    off_t file_size = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    // send file size to client
+    if (write(connfd, &file_size, sizeof(file_size)) < 0) {
+        perror("Error writing file size to socket");
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    ssize_t bytes_read;
+    while ((bytes_read = read(fd, buffer, 1024)) > 0) {
+        if (write(connfd, buffer, bytes_read) < 0) {
+            perror("Error writing to socket");
+            close(fd);
+            exit(EXIT_FAILURE);
+        }
+    }
+    printf("Finished\n");
+    close(fd);
+}
+
+
 // Function to extract filename from a given string
 char* extract_filename(const char* str) {
     // Find the position of the space character ' ' in the string
@@ -337,7 +391,7 @@ char* extract_filename(const char* str) {
         return NULL; // No space character found
     }
 }
-void copy_file(const char *source, const char *destination_with_filename) {
+void copy_file(const char *source, const char *destination_with_filename, int *found) {
     // Open the source file in readonly mode
     int source_fd = open(source, O_RDONLY);
     if (source_fd == -1) {
@@ -352,11 +406,11 @@ void copy_file(const char *source, const char *destination_with_filename) {
     // Append the file name to the destination path
     char destination_path[strlen(destination_with_filename) + strlen(file_name) + 2]; // +2 for '/' and null terminator
     sprintf(destination_path, "%s/%s", destination_with_filename, file_name);
-
     if(strcmp(source,destination_path)==0)
     {
         return;
     }
+
     // Create or open the destination file with appropriate permissions
     int destination_fd = open(destination_path, O_CREAT | O_WRONLY | O_TRUNC, 0744);
     if (destination_fd == -1) {
@@ -382,6 +436,8 @@ void copy_file(const char *source, const char *destination_with_filename) {
         printf("Error reading from source file\n");
     }
 
+    *found=1;
+
     // Close file descriptors
     close(source_fd);
     close(destination_fd);
@@ -406,7 +462,7 @@ char *get_file_extension(const char *filename) {
     return dot + 1;  // Return the extension (excluding the dot)
 }
 
-void get_files(const char *dir_path,long size1,long size2, const char *temp_folder) {
+void get_files(const char *dir_path,long size1,long size2, const char *temp_folder, int *found) {
     DIR *dir;
     struct dirent *entry;
     struct stat file_stat;
@@ -430,12 +486,12 @@ void get_files(const char *dir_path,long size1,long size2, const char *temp_fold
         }
 
         if (S_ISDIR(file_stat.st_mode)) {
-            get_files(file_path, size1, size2, temp_folder);
+            get_files(file_path, size1, size2, temp_folder, found);
         } else if (S_ISREG(file_stat.st_mode)) {
             char *extension = get_file_extension(entry->d_name);
             if (extension != NULL && file_stat.st_size >= size1 && file_stat.st_size <= size2) {
                 //printf("Copying file: %s\n", file_path);
-                copy_file(file_path, temp_folder);
+                copy_file(file_path, temp_folder, found);
             }
         }
     }
@@ -523,7 +579,7 @@ void copyFilesWithExtensions(const char *directory, const char *extensions[], in
                         snprintf(tempFilePath, sizeof(tempFilePath), "%s/temp", getenv("HOME"));
                         *found=1;
                         //snprintf(tempFilePath, sizeof(tempFilePath), "%s/%s", tempFolder, entry->d_name);
-                        copy_file(filepath, tempFilePath);
+                        copy_file(filepath, tempFilePath, found);
                       
                     }
                 }
@@ -633,24 +689,30 @@ void crequest(int count, int connfd){
             // Create temp folder if it doesn't exist
             mkdir(temp_folder, 0700);
 
-            get_files(getenv("HOME"), size1, size2, temp_folder);
+            int found=0;
 
-            // Create tar.gz file
-            create_tar_gz(temp_folder);
+            get_files(getenv("HOME"), size1, size2, temp_folder, &found);
 
-            // Delete temp folder
-            delete_folder(temp_folder);
-            // n = write(connfd, buffer, strlen(buffer));
-            // if(n<0){
-            //     printf("Error on writing\n");
-            // }
+            if(found==1){
+                // Create tar.gz file
+                create_tar_gz(temp_folder);
+
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }else{
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }            
          }
-             else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
-
-
+         else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
             const char *extensions[MAX_EXTENSIONS];  // Array to store pointers to strings
             int numExtensions = 0;  // Variable to keep track of the number of extensions
-            int found=0;
             if (buffer[strlen(buffer) - 1] == '\n')
             {
                 buffer[strlen(buffer) - 1] = '\0';
@@ -674,23 +736,25 @@ void crequest(int count, int connfd){
             // Start copying files with specified extensions from the home directory  // Create temp folder if it doesn't exist
             mkdir(temp_folder, 0700);
 
+            int found=0;
             copyFilesWithExtensions(getenv("HOME"), extensions, numExtensions, &found);
-            if(!found)
-            {
-                bzero(buffer,1024);
-                strcpy(buffer, "No file found\n");
-                n = write(connfd, buffer, strlen(buffer));
-            }
-            // Create tar.gz file
-            create_tar_gz(temp_folder);
+            
+            if(found==1){
+                // Create tar.gz file
+                create_tar_gz(temp_folder);
 
-            // Delete temp folder
-            delete_folder(temp_folder);
-            bzero(buffer,1024);
-            // n = write(connfd, buffer, strlen(buffer));
-            // if(n<0){
-            //     printf("Error on writing\n");
-            // }
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }else{
+                // Delete temp folder
+                delete_folder(temp_folder);
+                bzero(buffer,1024);
+
+                sendFile(connfd, buffer, found);
+            }
     }
          
         else{
