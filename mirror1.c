@@ -629,7 +629,80 @@ void tokenizeString(const char *input, const char *delimiter, const char **token
     
     free(inputCopy); // Free the dynamically allocated memory
 }
+void tokenize_and_remove(char *buffer, char *removeString, char *result) {
+    // Tokenize the buffer using strtok
+    char *token = strtok(buffer, " ");
+    int pos = 0;
 
+    // Iterate through the tokens
+    while (token != NULL) {
+        // If the token is not the removeString, concatenate it to the result
+        if (strcmp(token, removeString) != 0) {
+            // Copy token to result
+            strcpy(&result[pos], token);
+            pos += strlen(token);
+            result[pos++] = ' '; // Add space
+        }
+        token = strtok(NULL, " ");
+    }
+
+    // Remove trailing space if exists
+    if (pos > 0) {
+        result[pos - 1] = '\0';
+    }
+}
+// Function to convert date string to UNIX timestamp
+time_t convert_to_timestamp(const char *date_str) {
+    struct tm tm = {0};
+    if (sscanf(date_str, "%d-%d-%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday) != 3) {
+        printf("Error parsing date\n");
+        exit(EXIT_FAILURE);
+    }
+    tm.tm_year -= 1900; // Adjust year
+    tm.tm_mon--;        // Adjust month
+    return mktime(&tm);
+}
+
+// Recursive function to copy files based on creation date condition
+void copy_files_recursive(const char *user_date, const char *temp_folder_path, const char *dir_path, int * found, char * type) {
+    DIR *dir = opendir(dir_path);
+    if (dir == NULL) {
+        printf("Error opening directory %s\n", dir_path);
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') { // Ignore hidden files and directories
+            char entry_path[512];
+            snprintf(entry_path, sizeof(entry_path), "%s/%s", dir_path, entry->d_name);
+            struct stat stat_buf;
+            if (stat(entry_path, &stat_buf) == 0 && S_ISDIR(stat_buf.st_mode)) { // Check if entry is a directory
+                copy_files_recursive(user_date, temp_folder_path, entry_path, found,type); // Recursively traverse directories
+            } else {
+                char file_info[1024] = "";
+                getFileInfo(entry_path, file_info);
+                char file_date[11];
+                sscanf(file_info, "Birth: %s", file_date);
+                time_t user_timestamp = convert_to_timestamp(user_date);
+                time_t file_timestamp = convert_to_timestamp(file_date);
+                if(strcmp(type,"w24fda")==0)
+                {
+                    if (difftime(file_timestamp, user_timestamp) >= 0) {
+                    copy_file(entry_path, temp_folder_path, found);
+                    }
+                }
+                else if(strcmp(type,"w24fdb")==0)
+                {
+                    if (difftime(file_timestamp, user_timestamp) <= 0) {
+                    copy_file(entry_path, temp_folder_path, found);
+                    }
+                }
+                
+            }
+        }
+    }
+    closedir(dir);
+}
 void crequest(int count, int connfd){
     char buffer[1024];
     int n;
@@ -754,6 +827,62 @@ void crequest(int count, int connfd){
                 bzero(buffer,1024);
 
                 sendFile(connfd, buffer, found);
+            }
+    }
+    else if(strncmp("w24fda",buffer,strlen("w24fda"))==0){
+        char user_date[11]; // Size of "YYYY-MM-DD" + '\0'
+        tokenize_and_remove(buffer, "w24fda", user_date);
+        if (user_date[strlen(user_date) - 1] == '\n')
+        {
+            user_date[strlen(user_date) - 1] = '\0';
+        }
+        char temp_folder[1024];
+        snprintf(temp_folder, sizeof(temp_folder), "%s/temp", getenv("HOME"));
+        mkdir(temp_folder, 0700);
+        int found=0;
+        char * type ="w24fda";
+        copy_files_recursive(user_date, temp_folder, getenv("HOME"), &found, type);
+        if(found==1){
+            // Create tar.gz file
+            create_tar_gz(temp_folder);
+
+            // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
+            }else{
+                // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
+            }
+    }
+     else if(strncmp("w24fdb",buffer,strlen("w24fdb"))==0){
+        char user_date[11]; // Size of "YYYY-MM-DD" + '\0'
+        tokenize_and_remove(buffer, "w24fdb", user_date);
+        if (user_date[strlen(user_date) - 1] == '\n')
+        {
+            user_date[strlen(user_date) - 1] = '\0';
+        }
+        char temp_folder[1024];
+        snprintf(temp_folder, sizeof(temp_folder), "%s/temp", getenv("HOME"));
+        mkdir(temp_folder, 0700);
+        int found=0;
+        char * type ="w24fdb";
+        copy_files_recursive(user_date, temp_folder, getenv("HOME"), &found, type);
+        if(found==1){
+            // Create tar.gz file
+            create_tar_gz(temp_folder);
+
+            // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
+            }else{
+                // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
             }
     }
          
