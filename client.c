@@ -267,9 +267,9 @@ int main(int argc, char *argv[]) {
         }else if(strncmp(buffer,"w24ft",strlen("w24ft"))==0){
             processFileCommand(sockfd, buffer);
         }else if(strncmp(buffer,"w24fdb",strlen("w24fdb"))==0){
-            processCommand(sockfd, buffer);
+            processFileCommand(sockfd, buffer);
         }else if(strncmp(buffer,"w24fda",strlen("w24fda"))==0){
-            processCommand(sockfd, buffer);
+            processFileCommand(sockfd, buffer);
         }else if(strncmp(buffer,"hi",strlen("hi"))==0){
             processCommand(sockfd,buffer);
         }else if(strncmp(buffer,"file",strlen("file"))==0){
