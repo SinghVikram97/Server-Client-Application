@@ -698,7 +698,16 @@ void processDirs(const char *basePath, char *buffer) {
     // Print directory information
     printDirInformation(dirArray, count, buffer);
 }
-
+void delete_tar()
+{
+   char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
+    // Construct the path of the folder to delete
+    char folder_path[2048];
+    snprintf(folder_path, sizeof(folder_path), "%s/temp.tar.gz", cwd);
+    // Call delete_folder function
+    delete_folder(folder_path);
+}
 void handleRequestOnClient(int count, int connfd, char *buffer){
     int n;
     if(strncmp("dirlist -a",buffer,strlen("dirlist -a"))==0){
@@ -752,8 +761,8 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
                 // Delete temp folder
                 delete_folder(temp_folder);
                 bzero(buffer,1024);
-
                 sendFile(connfd, buffer, found);
+                delete_tar();
             }else{
                 // Delete temp folder
                 delete_folder(temp_folder);
@@ -781,12 +790,6 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             }
             char temp_folder[1024];
             snprintf(temp_folder, sizeof(temp_folder), "%s/temp", getenv("HOME"));
-            // for(int i=0;i<numExtensions;i++)
-            // {
-            //     printf("%s\n",extensions[i]);
-            // }
-
-            // Start copying files with specified extensions from the home directory  // Create temp folder if it doesn't exist
             mkdir(temp_folder, 0700);
 
             int found=0;
@@ -799,8 +802,8 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
                 // Delete temp folder
                 delete_folder(temp_folder);
                 bzero(buffer,1024);
-
                 sendFile(connfd, buffer, found);
+                delete_tar();
             }else{
                 // Delete temp folder
                 delete_folder(temp_folder);
@@ -831,6 +834,7 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             delete_folder(temp_folder);
             bzero(buffer,1024);
             sendFile(connfd, buffer, found);
+            delete_tar();
             }else{
                 // Delete temp folder
             delete_folder(temp_folder);
@@ -859,6 +863,7 @@ void handleRequestOnClient(int count, int connfd, char *buffer){
             delete_folder(temp_folder);
             bzero(buffer,1024);
             sendFile(connfd, buffer, found);
+            delete_tar();
             }else{
                 // Delete temp folder
             delete_folder(temp_folder);

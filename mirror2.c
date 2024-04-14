@@ -699,7 +699,16 @@ void processDirs(const char *basePath, char *buffer) {
     // Print directory information
     printDirInformation(dirArray, count, buffer);
 }
-
+void delete_tar()
+{
+   char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
+    // Construct the path of the folder to delete
+    char folder_path[2048];
+    snprintf(folder_path, sizeof(folder_path), "%s/temp.tar.gz", cwd);
+    // Call delete_folder function
+    delete_folder(folder_path);
+}
 void crequest(int count, int connfd){
     char buffer[1024];
     int n;
@@ -770,13 +779,12 @@ void crequest(int count, int connfd){
                 // Delete temp folder
                 delete_folder(temp_folder);
                 bzero(buffer,1024);
-
                 sendFile(connfd, buffer, found);
+                delete_tar();
             }else{
                 // Delete temp folder
                 delete_folder(temp_folder);
                 bzero(buffer,1024);
-
                 sendFile(connfd, buffer, found);
             }            
          }
@@ -818,6 +826,7 @@ void crequest(int count, int connfd){
                 bzero(buffer,1024);
 
                 sendFile(connfd, buffer, found);
+                delete_tar();
             }else{
                 // Delete temp folder
                 delete_folder(temp_folder);
@@ -847,6 +856,7 @@ void crequest(int count, int connfd){
             delete_folder(temp_folder);
             bzero(buffer,1024);
             sendFile(connfd, buffer, found);
+            delete_tar();
             }else{
                 // Delete temp folder
             delete_folder(temp_folder);
@@ -875,6 +885,7 @@ void crequest(int count, int connfd){
             delete_folder(temp_folder);
             bzero(buffer,1024);
             sendFile(connfd, buffer, found);
+            delete_tar();
             }else{
                 // Delete temp folder
             delete_folder(temp_folder);
