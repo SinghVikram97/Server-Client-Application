@@ -174,7 +174,7 @@ void searchFile(const char *filename, char *buffer) {
     searchFileRecursive(filename, getenv("HOME"), buffer, &found);
 
     if (!found) {
-        snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "File not found.\n");
+        snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), " File not found.\n");
     }
 }
 

@@ -133,7 +133,6 @@ void searchFileRecursive(const char *filename, const char *directory, char *buff
             continue;
 
         if (stat(path, &file_stat) == -1) {
-            perror("stat");
             continue;
         }
 
@@ -254,7 +253,7 @@ void sendFile(int connfd, char *buffer, int found) {
         ssize_t start_signal_len = strlen(start_signal);
 
         int n = write(connfd, start_signal, start_signal_len);
-        printf("DONOT_TRANSFER bytes written %d\n",n);
+        //printf("DONOT_TRANSFER bytes written %d\n",n);
         return;
     }
     
@@ -264,7 +263,7 @@ void sendFile(int connfd, char *buffer, int found) {
     ssize_t start_signal_len = strlen(start_signal);
 
     int n = write(connfd, start_signal, start_signal_len);
-    printf("START_TRANSFER bytes written %d\n",n);
+    //printf("START_TRANSFER bytes written %d\n",n);
    
 
     int fd = open("./temp.tar.gz", O_RDONLY);
