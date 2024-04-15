@@ -20,13 +20,11 @@
 #define MAX_EXTENSIONS 3
 #define MAX_PATH_LENGTH 1024
 
-// Struct to hold directory name and creation time
-// Struct to hold directory information
-typedef struct {
-    char name[256]; // Directory name
-    char creation_time[20]; // Creation time
-} DirectoryInfo;
-
+// Structure to hold directory name and creation time
+struct DirCreationTime {
+    char dirname[1024];
+    char creationTime[1024];
+};
 
 // Function to execute a command and store its output
 char* execute_command(const char* command) {
@@ -135,7 +133,6 @@ void searchFileRecursive(const char *filename, const char *directory, char *buff
             continue;
 
         if (stat(path, &file_stat) == -1) {
-            perror("stat");
             continue;
         }
 
@@ -178,81 +175,7 @@ void searchFile(const char *filename, char *buffer) {
     }
 }
 
-// Comparison function for qsort to sort directories based on creation time
-int compareDirectories(const void *a, const void *b) {
-    DirectoryInfo *dir1 = (DirectoryInfo *)a;
-    DirectoryInfo *dir2 = (DirectoryInfo *)b;
-    return strcmp(dir1->creation_time, dir2->creation_time);
-}
 
-// Function to list subdirectories in the order of their creation time
-void listSubdirectoriesByCreationTime(char *buffer) {
-    char *path = getenv("HOME");
-    DIR *dir;
-    struct dirent *entry;
-    size_t buffer_length = 0;
-    DirectoryInfo directories[1024];
-    int num_directories = 0;
-
-    // Open directory
-    if ((dir = opendir(path)) != NULL) {
-        // Iterate through directory entries
-        while ((entry = readdir(dir)) != NULL) {
-            if (entry->d_type == DT_DIR) {
-                // Skip "." and ".."
-                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-                    continue;
-
-                // Get directory path
-                char dir_path[1024];
-                snprintf(dir_path, sizeof(dir_path), "%s/%s", path, entry->d_name);
-
-                // Get directory's status
-                struct stat file_stat;
-                if (stat(dir_path, &file_stat) == -1) {
-                    fprintf(stderr, "Error getting file status: %s\n", strerror(errno));
-                    continue;
-                }
-
-                // Convert creation time to string format
-                strftime(directories[num_directories].creation_time, sizeof(directories[num_directories].creation_time),
-                         "%Y-%m-%d %H:%M:%S", localtime(&(file_stat.st_ctime)));
-
-                // Copy directory name
-                strncpy(directories[num_directories].name, entry->d_name, sizeof(directories[num_directories].name) - 1);
-                directories[num_directories].name[sizeof(directories[num_directories].name) - 1] = '\0';
-
-                // Increment directory count
-                num_directories++;
-            }
-        }
-        closedir(dir);
-
-        // Sort directories based on creation time
-        qsort(directories, num_directories, sizeof(DirectoryInfo), compareDirectories);
-
-        // Copy sorted directories to buffer
-        for (int i = 0; i < num_directories; i++) {
-            // Get length of directory name
-            size_t entry_length = strlen(directories[i].name);
-
-            // Check for buffer overflow
-            if (buffer_length + entry_length + 2 <= 1024) {
-                // Append directory name to buffer
-                strcat(buffer, directories[i].name);
-                strcat(buffer, "\n");
-                buffer_length += entry_length + 1; // Add length of directory name and newline character
-            } else {
-                fprintf(stderr, "Buffer overflow\n");
-                break;
-            }
-        }
-    } else {
-        // Unable to open directory
-        perror("Error opening directory");
-        exit(EXIT_FAILURE);
-    }
-}
 
 int compareStrings(const void *a, const void *b) {
     const char *str1 = *(const char **)a;
@@ -330,7 +253,7 @@ void sendFile(int connfd, char *buffer, int found) {
         ssize_t start_signal_len = strlen(start_signal);
 
         int n = write(connfd, start_signal, start_signal_len);
-        printf("DONOT_TRANSFER bytes written %d\n",n);
+        //printf("DONOT_TRANSFER bytes written %d\n",n);
         return;
     }
     
@@ -340,7 +263,7 @@ void sendFile(int connfd, char *buffer, int found) {
     ssize_t start_signal_len = strlen(start_signal);
 
     int n = write(connfd, start_signal, start_signal_len);
-    printf("START_TRANSFER bytes written %d\n",n);
+    //printf("START_TRANSFER bytes written %d\n",n);
    
 
     int fd = open("./temp.tar.gz", O_RDONLY);
@@ -368,7 +291,7 @@ void sendFile(int connfd, char *buffer, int found) {
             exit(EXIT_FAILURE);
         }
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
 }
 
@@ -391,7 +314,24 @@ char* extract_filename(const char* str) {
         return NULL; // No space character found
     }
 }
+int containsClient(const char *str) {
+    // Get the length of the string
+    int len = strlen(str);
+    // Iterate through the string
+    for (int i = 0; i < len; i++) {
+        // Check if the substring "client" starts at position i
+        if (strncmp(str + i, "client", 6) == 0) {
+            return 1; // Substring found
+        }
+    }
+    return 0; // Substring not found
+}
 void copy_file(const char *source, const char *destination_with_filename, int *found) {
+    
+    if(containsClient(source))
+    {
+        return;
+    }
     // Open the source file in readonly mode
     int source_fd = open(source, O_RDONLY);
     if (source_fd == -1) {
@@ -408,6 +348,7 @@ void copy_file(const char *source, const char *destination_with_filename, int *f
     sprintf(destination_path, "%s/%s", destination_with_filename, file_name);
     if(strcmp(source,destination_path)==0)
     {
+        close(source_fd);
         return;
     }
 
@@ -629,7 +570,162 @@ void tokenizeString(const char *input, const char *delimiter, const char **token
     
     free(inputCopy); // Free the dynamically allocated memory
 }
+void tokenize_and_remove(char *buffer, char *removeString, char *result) {
+    // Tokenize the buffer using strtok
+    char *token = strtok(buffer, " ");
+    int pos = 0;
 
+    // Iterate through the tokens
+    while (token != NULL) {
+        // If the token is not the removeString, concatenate it to the result
+        if (strcmp(token, removeString) != 0) {
+            // Copy token to result
+            strcpy(&result[pos], token);
+            pos += strlen(token);
+            result[pos++] = ' '; // Add space
+        }
+        token = strtok(NULL, " ");
+    }
+
+    // Remove trailing space if exists
+    if (pos > 0) {
+        result[pos - 1] = '\0';
+    }
+}
+// Function to convert date string to UNIX timestamp
+time_t convert_to_timestamp(const char *date_str) {
+    struct tm tm = {0};
+    if (sscanf(date_str, "%d-%d-%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday) != 3) {
+        printf("Error parsing date\n");
+        exit(EXIT_FAILURE);
+    }
+    tm.tm_year -= 1900; // Adjust year
+    tm.tm_mon--;        // Adjust month
+    return mktime(&tm);
+}
+
+// Recursive function to copy files based on creation date condition
+void copy_files_recursive(const char *user_date, const char *temp_folder_path, const char *dir_path, int * found, char * type) {
+    DIR *dir = opendir(dir_path);
+    if (dir == NULL) {
+        printf("Error opening directory %s\n", dir_path);
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') { // Ignore hidden files and directories
+            char entry_path[512];
+            snprintf(entry_path, sizeof(entry_path), "%s/%s", dir_path, entry->d_name);
+            struct stat stat_buf;
+            if (stat(entry_path, &stat_buf) == 0 && S_ISDIR(stat_buf.st_mode)) { // Check if entry is a directory
+                copy_files_recursive(user_date, temp_folder_path, entry_path, found,type); // Recursively traverse directories
+            } else {
+                char file_info[1024] = "";
+                getFileInfo(entry_path, file_info);
+                char file_date[11];
+                sscanf(file_info, "Birth: %s", file_date);
+                time_t user_timestamp = convert_to_timestamp(user_date);
+                time_t file_timestamp = convert_to_timestamp(file_date);
+                if(strcmp(type,"w24fda")==0)
+                {
+                    if (difftime(file_timestamp, user_timestamp) >= 0) {
+                    copy_file(entry_path, temp_folder_path, found);
+                    }
+                }
+                else if(strcmp(type,"w24fdb")==0)
+                {
+                    if (difftime(file_timestamp, user_timestamp) <= 0) {
+                    copy_file(entry_path, temp_folder_path, found);
+                    }
+                }
+                
+            }
+        }
+    }
+    closedir(dir);
+}
+// Function to recursively list directories
+void listDirs(const char *basePath, struct DirCreationTime **dirArray, int *count) {
+    DIR *dir;
+    struct dirent *entry;
+    struct stat statbuf;
+
+    if (!(dir = opendir(basePath))) {
+        return;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/%s", basePath, entry->d_name);
+
+        if (entry->d_type == DT_DIR) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+                continue;  // Ignore current and parent directory
+            }
+
+            // Ignore hidden directories
+            if (entry->d_name[0] == '.') {
+                continue;
+            }
+
+            // Get directory info and add to the array
+            char dirInfo[1024] = "";
+            getFileInfo(path, dirInfo);
+            struct DirCreationTime *dirInfoStruct = (struct DirCreationTime *)malloc(sizeof(struct DirCreationTime));
+            snprintf(dirInfoStruct->dirname, sizeof(dirInfoStruct->dirname), "%s", path);
+            snprintf(dirInfoStruct->creationTime, sizeof(dirInfoStruct->creationTime), "%s", dirInfo);
+            dirArray[*count] = dirInfoStruct;
+            (*count)++;
+        }
+    }
+
+    closedir(dir);
+}
+
+// Comparator function for sorting directory creation time
+int compareCreationTime(const void *a, const void *b) {
+    const struct DirCreationTime *da = *(const struct DirCreationTime **)a;
+    const struct DirCreationTime *db = *(const struct DirCreationTime **)b;
+    return strcmp(da->creationTime, db->creationTime);
+}
+
+// Function to print directory information
+void printDirInformation(struct DirCreationTime **dirArray, int count, char *buffer) {
+    // Initialize buffer index
+    int bufferIndex = 0;
+
+    // Print in ascending order
+    for (int i = 0; i < count; i++) {
+        // Format the string into the buffer
+        bufferIndex += sprintf(buffer + bufferIndex, "%s\n\n", dirArray[i]->dirname);
+        bufferIndex--; // Adjust buffer index to remove extra space
+        free(dirArray[i]); // Free dynamically allocated memory
+    }
+}
+
+// Function to list directories, sort them, and print their information
+void processDirs(const char *basePath, char *buffer) {
+    struct DirCreationTime *dirArray[1024];
+    int count = 0;
+
+    listDirs(basePath, dirArray, &count);
+
+    // Sort the dirArray based on creation time
+    qsort(dirArray, count, sizeof(struct DirCreationTime *), compareCreationTime);
+
+    // Print directory information
+    printDirInformation(dirArray, count, buffer);
+}
+void delete_tar()
+{
+   char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
+    // Construct the path of the folder to delete
+    char folder_path[2048];
+    snprintf(folder_path, sizeof(folder_path), "%s/temp.tar.gz", cwd);
+    // Call delete_folder function
+    delete_folder(folder_path);
+}
 void crequest(int count, int connfd){
     char buffer[1024];
     int n;
@@ -658,7 +754,7 @@ void crequest(int count, int connfd){
         }
         else if(strncmp("dirlist -t",buffer,strlen("dirlist -t"))==0){
             bzero(buffer,1024);
-            listSubdirectoriesByCreationTime(buffer);
+            processDirs(getenv("HOME"), buffer);
             n = write(connfd, buffer, strlen(buffer));
             if(n<0){
                 printf("Error on writing\n");
@@ -700,13 +796,12 @@ void crequest(int count, int connfd){
                 // Delete temp folder
                 delete_folder(temp_folder);
                 bzero(buffer,1024);
-
                 sendFile(connfd, buffer, found);
+                delete_tar();
             }else{
                 // Delete temp folder
                 delete_folder(temp_folder);
                 bzero(buffer,1024);
-
                 sendFile(connfd, buffer, found);
             }            
          }
@@ -748,12 +843,71 @@ void crequest(int count, int connfd){
                 bzero(buffer,1024);
 
                 sendFile(connfd, buffer, found);
+                delete_tar();
             }else{
                 // Delete temp folder
                 delete_folder(temp_folder);
                 bzero(buffer,1024);
 
                 sendFile(connfd, buffer, found);
+            }
+    }
+    else if(strncmp("w24fda",buffer,strlen("w24fda"))==0){
+        char user_date[11]; // Size of "YYYY-MM-DD" + '\0'
+        tokenize_and_remove(buffer, "w24fda", user_date);
+        if (user_date[strlen(user_date) - 1] == '\n')
+        {
+            user_date[strlen(user_date) - 1] = '\0';
+        }
+        char temp_folder[1024];
+        snprintf(temp_folder, sizeof(temp_folder), "%s/temp", getenv("HOME"));
+        mkdir(temp_folder, 0700);
+        int found=0;
+        char * type ="w24fda";
+        copy_files_recursive(user_date, temp_folder, getenv("HOME"), &found, type);
+        if(found==1){
+            // Create tar.gz file
+            create_tar_gz(temp_folder);
+
+            // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
+            delete_tar();
+            }else{
+                // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
+            }
+    }
+     else if(strncmp("w24fdb",buffer,strlen("w24fdb"))==0){
+        char user_date[11]; // Size of "YYYY-MM-DD" + '\0'
+        tokenize_and_remove(buffer, "w24fdb", user_date);
+        if (user_date[strlen(user_date) - 1] == '\n')
+        {
+            user_date[strlen(user_date) - 1] = '\0';
+        }
+        char temp_folder[1024];
+        snprintf(temp_folder, sizeof(temp_folder), "%s/temp", getenv("HOME"));
+        mkdir(temp_folder, 0700);
+        int found=0;
+        char * type ="w24fdb";
+        copy_files_recursive(user_date, temp_folder, getenv("HOME"), &found, type);
+        if(found==1){
+            // Create tar.gz file
+            create_tar_gz(temp_folder);
+
+            // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
+            delete_tar();
+            }else{
+                // Delete temp folder
+            delete_folder(temp_folder);
+            bzero(buffer,1024);
+            sendFile(connfd, buffer, found);
             }
     }
          

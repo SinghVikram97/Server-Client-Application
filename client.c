@@ -47,7 +47,7 @@ void processFileCommand(int sockfd, char *buffer) {
         return;
     }
     start_signal[14] = '\0'; // Null-terminate the string
-    printf("Received start signal (%ld bytes): %s\n", bytes_receivedSignal, start_signal);
+    //printf("Received start signal (%ld bytes): %s\n", bytes_receivedSignal, start_signal);
 
     if (strcmp(start_signal, "DONOT_TRANSFER") == 0) {
         printf("No file found\n");
@@ -98,7 +98,7 @@ void processFileCommand(int sockfd, char *buffer) {
         }
         total_bytes_received += bytes_written;
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
     if (bytes_received < 0) {
         perror("Error reading from socket");
@@ -267,11 +267,11 @@ int main(int argc, char *argv[]) {
         }else if(strncmp(buffer,"w24ft",strlen("w24ft"))==0){
             processFileCommand(sockfd, buffer);
         }else if(strncmp(buffer,"w24fdb",strlen("w24fdb"))==0){
-            processCommand(sockfd, buffer);
+            processFileCommand(sockfd, buffer);
         }else if(strncmp(buffer,"w24fda",strlen("w24fda"))==0){
-            processCommand(sockfd, buffer);
+            processFileCommand(sockfd, buffer);
         }else if(strncmp(buffer,"hi",strlen("hi"))==0){
-            processCommand(sockfd,buffer);
+            processFileCommand(sockfd,buffer);
         }else if(strncmp(buffer,"file",strlen("file"))==0){
             processFileCommand(sockfd, buffer);
         }
