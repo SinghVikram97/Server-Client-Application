@@ -291,7 +291,7 @@ void sendFile(int connfd, char *buffer, int found) {
             exit(EXIT_FAILURE);
         }
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
 }
 

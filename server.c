@@ -28,6 +28,29 @@ struct DirCreationTime {
     char creationTime[1024];
 };
 
+void delete_tar_files() {
+    DIR *directory;
+    struct dirent *entry;
+
+    directory = opendir(".");
+    if (directory == NULL) {
+        perror("Unable to open directory");
+        exit(EXIT_FAILURE);
+    }
+
+    while ((entry = readdir(directory)) != NULL) {
+        if (strstr(entry->d_name, ".tar") != NULL) {
+            if (remove(entry->d_name) != 0) {
+                perror("Error deleting file");
+            } else {
+                printf("%s deleted successfully\n", entry->d_name);
+            }
+        }
+    }
+
+    closedir(directory);
+}
+
 // Function to execute a command and store its output
 char* execute_command(const char* command) {
     char* buffer = (char*)malloc(1024 * sizeof(char));
@@ -292,7 +315,7 @@ void sendFile(int connfd, char *buffer, int found) {
             exit(EXIT_FAILURE);
         }
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
 }
 // Function to extract filename from a given string
@@ -375,7 +398,7 @@ void copy_file(const char *source, const char *destination_with_filename, int *f
     if (bytes_read == -1) {
         printf("Error reading from source file\n");
     }
-    printf("Source:%s: \n",source);
+    //printf("Source:%s: \n",source);
     *found=1;
 
     // Close file descriptors
@@ -953,7 +976,7 @@ void handleFileRequestsOnMirror1(int count, int connfd, int sockfdMirror1, char 
     }
 
     start_signal[14] = '\0'; // Null-terminate the string
-    printf("Received start signal (%ld bytes): %s\n", bytes_receivedSignal, start_signal);
+    //printf("Received start signal (%ld bytes): %s\n", bytes_receivedSignal, start_signal);
 
     // Recieved no file found from mirror1
     if (strcmp(start_signal, "DONOT_TRANSFER") == 0) {
@@ -962,7 +985,7 @@ void handleFileRequestsOnMirror1(int count, int connfd, int sockfdMirror1, char 
         ssize_t start_signal_len = strlen(start_signal);
 
         int n = write(connfd, start_signal, start_signal_len);
-        printf("DONOT_TRANSFER bytes written %d\n",n);
+        //printf("DONOT_TRANSFER bytes written %d\n",n);
         return;
         return;
     }
@@ -1011,7 +1034,7 @@ void handleFileRequestsOnMirror1(int count, int connfd, int sockfdMirror1, char 
         }
         total_bytes_received += bytes_written;
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
     if (bytes_received < 0) {
         perror("Error reading from socket");
@@ -1024,7 +1047,7 @@ void handleFileRequestsOnMirror1(int count, int connfd, int sockfdMirror1, char 
     ssize_t start_signal_len = strlen(start_signalToClient);
 
     n = write(connfd, start_signalToClient, start_signal_len);
-    printf("START_TRANSFER bytes written %d\n",n);
+    //printf("START_TRANSFER bytes written %d\n",n);
    
 
     fd = open(filename, O_RDONLY);
@@ -1052,7 +1075,7 @@ void handleFileRequestsOnMirror1(int count, int connfd, int sockfdMirror1, char 
             exit(EXIT_FAILURE);
         }
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
     
 }
@@ -1165,7 +1188,7 @@ void handleFileRequestsOnMirror2(int count, int connfd, int sockfdMirror2, char 
         }
         total_bytes_received += bytes_written;
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
     if (bytes_received < 0) {
         perror("Error reading from socket");
@@ -1178,7 +1201,7 @@ void handleFileRequestsOnMirror2(int count, int connfd, int sockfdMirror2, char 
     ssize_t start_signal_len = strlen(start_signalToClient);
 
     n = write(connfd, start_signalToClient, start_signal_len);
-    printf("START_TRANSFER bytes written %d\n",n);
+    //printf("START_TRANSFER bytes written %d\n",n);
    
 
     fd = open(filename, O_RDONLY);
@@ -1206,7 +1229,7 @@ void handleFileRequestsOnMirror2(int count, int connfd, int sockfdMirror2, char 
             exit(EXIT_FAILURE);
         }
     }
-    printf("Finished\n");
+    //printf("Finished\n");
     close(fd);
     
 }
@@ -1232,8 +1255,18 @@ void crequest(int count, int connfd, int sockfdMirror1, int sockfdMirror2){
         }else if(count%3==2){
             if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
                 handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                delete_tar_files();
             }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
                 handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                delete_tar_files();
+            }
+            else if(strncmp("w24fdb",buffer,strlen("w24fdb"))==0){
+                handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                delete_tar_files();
+            }
+            else if(strncmp("w24fda",buffer,strlen("w24fda"))==0){
+                handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                delete_tar_files();
             }
             else{
                 handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
@@ -1241,8 +1274,17 @@ void crequest(int count, int connfd, int sockfdMirror1, int sockfdMirror2){
         }else if(count%3==0){
              if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
                 handleFileRequestsOnMirror2(count, connfd, sockfdMirror2, buffer);
+                delete_tar_files();
             }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
                 handleFileRequestsOnMirror2(count, connfd, sockfdMirror2, buffer);
+                delete_tar_files();
+            }else if(strncmp("w24fdb",buffer,strlen("w24fdb"))==0){
+                handleFileRequestsOnMirror2(count, connfd, sockfdMirror1, buffer);
+                delete_tar_files();
+            }
+            else if(strncmp("w24fda",buffer,strlen("w24fda"))==0){
+                handleFileRequestsOnMirror2(count, connfd, sockfdMirror1, buffer);
+                delete_tar_files();
             }
             else{
                 handleRequestOnMirror2(count, connfd, sockfdMirror2, buffer);
