@@ -43,7 +43,7 @@ void delete_tar_files() {
             if (remove(entry->d_name) != 0) {
                 perror("Error deleting file");
             } else {
-                printf("%s deleted successfully\n", entry->d_name);
+                //printf("%s deleted successfully\n", entry->d_name);
             }
         }
     }
@@ -1139,7 +1139,7 @@ void handleFileRequestsOnMirror2(int count, int connfd, int sockfdMirror2, char 
         ssize_t start_signal_len = strlen(start_signal);
 
         int n = write(connfd, start_signal, start_signal_len);
-        printf("DONOT_TRANSFER bytes written %d\n",n);
+        //printf("DONOT_TRANSFER bytes written %d\n",n);
         return;
         return;
     }
