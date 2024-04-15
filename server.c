@@ -43,7 +43,7 @@ void delete_tar_files() {
             if (remove(entry->d_name) != 0) {
                 perror("Error deleting file");
             } else {
-                printf("%s deleted successfully\n", entry->d_name);
+                //printf("%s deleted successfully\n", entry->d_name);
             }
         }
     }
@@ -1139,7 +1139,7 @@ void handleFileRequestsOnMirror2(int count, int connfd, int sockfdMirror2, char 
         ssize_t start_signal_len = strlen(start_signal);
 
         int n = write(connfd, start_signal, start_signal_len);
-        printf("DONOT_TRANSFER bytes written %d\n",n);
+        //printf("DONOT_TRANSFER bytes written %d\n",n);
         return;
         return;
     }
@@ -1250,10 +1250,10 @@ void crequest(int count, int connfd, int sockfdMirror1, int sockfdMirror2){
             break;
         }
 
-        if(count%3==1){
+        if(count<=3){
             handleRequestOnClient(count, connfd, buffer);
-        }else if(count%3==2){
-            if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
+        }else if(count>=4 && count<=6){
+             if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
                 handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
                 delete_tar_files();
             }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
@@ -1271,8 +1271,8 @@ void crequest(int count, int connfd, int sockfdMirror1, int sockfdMirror2){
             else{
                 handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
             }
-        }else if(count%3==0){
-             if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
+        }else if(count>=7 && count<=9){
+            if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
                 handleFileRequestsOnMirror2(count, connfd, sockfdMirror2, buffer);
                 delete_tar_files();
             }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
@@ -1289,8 +1289,48 @@ void crequest(int count, int connfd, int sockfdMirror1, int sockfdMirror2){
             else{
                 handleRequestOnMirror2(count, connfd, sockfdMirror2, buffer);
             }
+        } else{
+            if(count%3==1){
+                handleRequestOnClient(count, connfd, buffer);
+            }else if(count%3==2){
+                if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
+                handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                delete_tar_files();
+                }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
+                    handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                    delete_tar_files();
+                }
+                else if(strncmp("w24fdb",buffer,strlen("w24fdb"))==0){
+                    handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                    delete_tar_files();
+                }
+                else if(strncmp("w24fda",buffer,strlen("w24fda"))==0){
+                    handleFileRequestsOnMirror1(count, connfd, sockfdMirror1, buffer);
+                    delete_tar_files();
+                }
+                else{
+                    handleRequestOnMirror1(count, connfd, sockfdMirror1, buffer);
+                }
+            }else if(count%3==0){
+                 if(strncmp("w24fz",buffer,strlen("w24fz"))==0){
+                handleFileRequestsOnMirror2(count, connfd, sockfdMirror2, buffer);
+                delete_tar_files();
+                }else if(strncmp("w24ft",buffer,strlen("w24ft"))==0){
+                    handleFileRequestsOnMirror2(count, connfd, sockfdMirror2, buffer);
+                    delete_tar_files();
+                }else if(strncmp("w24fdb",buffer,strlen("w24fdb"))==0){
+                    handleFileRequestsOnMirror2(count, connfd, sockfdMirror1, buffer);
+                    delete_tar_files();
+                }
+                else if(strncmp("w24fda",buffer,strlen("w24fda"))==0){
+                    handleFileRequestsOnMirror2(count, connfd, sockfdMirror1, buffer);
+                    delete_tar_files();
+                }
+                else{
+                    handleRequestOnMirror2(count, connfd, sockfdMirror2, buffer);
+                }
+            }
         }
-
         bzero(buffer,1024);
     }
     close(connfd);   
