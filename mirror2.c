@@ -314,7 +314,24 @@ char* extract_filename(const char* str) {
         return NULL; // No space character found
     }
 }
+int containsClient(const char *str) {
+    // Get the length of the string
+    int len = strlen(str);
+    // Iterate through the string
+    for (int i = 0; i < len; i++) {
+        // Check if the substring "client" starts at position i
+        if (strncmp(str + i, "client", 6) == 0) {
+            return 1; // Substring found
+        }
+    }
+    return 0; // Substring not found
+}
 void copy_file(const char *source, const char *destination_with_filename, int *found) {
+    
+    if(containsClient(source))
+    {
+        return;
+    }
     // Open the source file in readonly mode
     int source_fd = open(source, O_RDONLY);
     if (source_fd == -1) {
@@ -331,6 +348,7 @@ void copy_file(const char *source, const char *destination_with_filename, int *f
     sprintf(destination_path, "%s/%s", destination_with_filename, file_name);
     if(strcmp(source,destination_path)==0)
     {
+        close(source_fd);
         return;
     }
 

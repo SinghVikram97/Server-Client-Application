@@ -15,7 +15,7 @@
 #include <sys/wait.h>
 #include <libgen.h>
 #include <ctype.h>
-
+#include <regex.h>
 #define SERVER_IP "127.0.0.1"
 #define MIRROR1_PORT "8073"
 #define MIRROR2_PORT "8074"
@@ -101,7 +101,7 @@ char* execute_command(const char* command) {
 // Function to get file information using stat command
 void getFileInfo(const char *filename, char *buffer) {
     char command[512];
-
+    
     // Construct the stat command
     snprintf(command, sizeof(command), "stat -c 'Birth: %%w' '%s'", filename);
 
@@ -135,7 +135,6 @@ void searchFileRecursive(const char *filename, const char *directory, char *buff
             continue;
 
         if (stat(path, &file_stat) == -1) {
-            perror("stat");
             continue;
         }
 
@@ -144,7 +143,7 @@ void searchFileRecursive(const char *filename, const char *directory, char *buff
             searchFileRecursive(filename, path, buffer, found);
             if (*found) // If file found in subdirectory, stop the search
                 break;
-        } else if (strcmp(entry->d_name, filename) == 0) {
+        } else if (strcmp(entry->d_name, filename) == 0) {    
             // If it's the desired file, get its information
             snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "Name: %s\n", path);
             snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), "Size: %ld bytes\n", file_stat.st_size);
@@ -174,7 +173,7 @@ void searchFile(const char *filename, char *buffer) {
     searchFileRecursive(filename, getenv("HOME"), buffer, &found);
 
     if (!found) {
-        snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), " File not found.\n");
+        snprintf(buffer + strlen(buffer), 1024 - strlen(buffer), ": File not found.\n");
     }
 }
 
@@ -255,7 +254,7 @@ void sendFile(int connfd, char *buffer, int found) {
         ssize_t start_signal_len = strlen(start_signal);
 
         int n = write(connfd, start_signal, start_signal_len);
-        printf("DONOT_TRANSFER bytes written %d\n",n);
+       // printf("DONOT_TRANSFER bytes written %d\n",n);
         return;
     }
     
@@ -265,12 +264,12 @@ void sendFile(int connfd, char *buffer, int found) {
     ssize_t start_signal_len = strlen(start_signal);
 
     int n = write(connfd, start_signal, start_signal_len);
-    printf("START_TRANSFER bytes written %d\n",n);
+   // printf("START_TRANSFER bytes written %d\n",n);
    
 
     int fd = open("./temp.tar.gz", O_RDONLY);
     if (fd == -1) {
-        perror("Error opening file");
+       // perror("Error opening file");
         return;
     }
 
@@ -314,14 +313,31 @@ char* extract_filename(const char* str) {
         return NULL; // No space character found
     }
 }
+int containsClient(const char *str) {
+    // Get the length of the string
+    int len = strlen(str);
+    // Iterate through the string
+    for (int i = 0; i < len; i++) {
+        // Check if the substring "client" starts at position i
+        if (strncmp(str + i, "client", 6) == 0) {
+            return 1; // Substring found
+        }
+    }
+    return 0; // Substring not found
+}
 void copy_file(const char *source, const char *destination_with_filename, int *found) {
+
+    if(containsClient(source))
+    {
+        return;
+    }
     // Open the source file in readonly mode
     int source_fd = open(source, O_RDONLY);
     if (source_fd == -1) {
         printf("Error opening source file\n");
         return;
     }
-
+  
     // Find the last '/' in the source path
     const char *last_slash = strrchr(source, '/');
     const char *file_name = (last_slash != NULL) ? last_slash + 1 : source;
@@ -331,6 +347,7 @@ void copy_file(const char *source, const char *destination_with_filename, int *f
     sprintf(destination_path, "%s/%s", destination_with_filename, file_name);
     if(strcmp(source,destination_path)==0)
     {
+        close(source_fd);
         return;
     }
 
@@ -358,7 +375,7 @@ void copy_file(const char *source, const char *destination_with_filename, int *f
     if (bytes_read == -1) {
         printf("Error reading from source file\n");
     }
-
+    printf("Source:%s: \n",source);
     *found=1;
 
     // Close file descriptors
